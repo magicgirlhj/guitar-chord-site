@@ -24,3 +24,4 @@
 - 和弦查询：C、Am、F#7、Bbmaj7、Dsus4、Cadd9、Bm7b5 等
 - 反向识别：输入 `x` 表示闷音，数字表示品位，例如 `x 3 2 0 1 0`
 # guitar-chord-site
+# guitar-chord-site
