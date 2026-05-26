@@ -716,7 +716,7 @@ function dedupeResults(results) {
 function createId(prefix = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
-function normalizeChartItem(item) {
+function normalizeChartItem(item = {}) {
   const frets = Array.isArray(item.frets) ? item.frets.map(fret => {
     if (fret === null) return null;
     const parsed = Number.parseInt(fret, 10);
@@ -734,7 +734,7 @@ function normalizeChartItem(item) {
     source: item.source || "曲谱记录"
   };
 }
-function normalizeChartSection(section, index = 0) {
+function normalizeChartSection(section = {}, index = 0) {
   return {
     id: section.id || createId("section"),
     title: section.title || (index === 0 ? DEFAULT_SECTION_TITLE : `段落 ${index + 1}`),
@@ -747,7 +747,7 @@ function createEmptySection(title = DEFAULT_SECTION_TITLE) {
     items: []
   });
 }
-function normalizeChart(chart, fallbackTitle = "未命名曲谱") {
+function normalizeChart(chart = {}, fallbackTitle = "未命名曲谱") {
   const sections = Array.isArray(chart.sections) ? chart.sections.map(normalizeChartSection) : [normalizeChartSection({
     title: DEFAULT_SECTION_TITLE,
     items: chart.items || []
@@ -823,14 +823,15 @@ function chartSectionsToText(title, sections) {
   if (!populated.length) return "";
   return `${title || "未命名曲谱"}\n${populated.map(section => `\n[${section.title}]\n${section.items.map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`).join("\n")}`).join("\n")}`;
 }
-function flattenSections(sections) {
-  return sections.flatMap(section => section.items);
+function flattenSections(sections = []) {
+  return (Array.isArray(sections) ? sections : []).flatMap(section => Array.isArray(section?.items) ? section.items : []);
 }
 function App() {
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
   const [editorBaseFret, setEditorBaseFret] = useState(1);
   const [draggedChord, setDraggedChord] = useState(null);
+  const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
   const [chartMessage, setChartMessage] = useState("");
   const importInputRef = useRef(null);
@@ -1063,10 +1064,24 @@ function App() {
       });
     });
   }
-  function handleChartDrop(sectionId, index) {
+  function markChartDropTarget(sectionId, index) {
     if (!draggedChord) return;
-    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    setDragTarget(target => target?.sectionId === sectionId && target?.index === index ? target : {
+      sectionId,
+      index
+    });
+  }
+  function clearChartDrag() {
     setDraggedChord(null);
+    setDragTarget(null);
+  }
+  function handleChartDrop(sectionId, index) {
+    if (!draggedChord) {
+      setDragTarget(null);
+      return;
+    }
+    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    clearChartDrag();
   }
   function setStringValue(index, value) {
     setFretValues(values => {
@@ -1370,19 +1385,25 @@ function App() {
     onSelect: () => selectSection(section.id),
     onRename: title => renameSection(section.id, title),
     onDelete: () => deleteSection(section.id),
-    onDropAt: index => handleChartDrop(section.id, index)
+    onDropAt: index => handleChartDrop(section.id, index),
+    onDragOverAtEnd: () => markChartDropTarget(section.id, section.items.length),
+    isDragging: Boolean(draggedChord),
+    isDropAtEnd: dragTarget?.sectionId === section.id && dragTarget?.index === section.items.length
   }, section.items.map((item, index) => React.createElement(ChartItem, {
     item: item,
-    index: index,
-    sectionId: section.id,
     key: item.id,
+    isDragging: draggedChord?.itemId === item.id,
+    isDropTarget: draggedChord?.itemId !== item.id && dragTarget?.sectionId === section.id && dragTarget?.index === index,
     onDragStart: () => {
       selectSection(section.id);
       setDraggedChord({
         sectionId: section.id,
         itemId: item.id
       });
+      setDragTarget(null);
     },
+    onDragOverBefore: () => markChartDropTarget(section.id, index),
+    onDragEnd: clearChartDrag,
     onDropBefore: () => handleChartDrop(section.id, index),
     onDuplicate: () => duplicateSectionItem(section.id, item.id),
     onRemove: () => removeSectionItem(section.id, item.id),
@@ -1515,12 +1536,20 @@ function ChartSection({
   onSelect,
   onRename,
   onDelete,
-  onDropAt
+  onDropAt,
+  onDragOverAtEnd,
+  isDragging,
+  isDropAtEnd
 }) {
+  const sectionClass = ["chart-section", active ? "active-section" : "", isDragging ? "drag-aware-section" : "", isDropAtEnd ? "section-drop-target" : ""].filter(Boolean).join(" ");
+  const sequenceClass = ["chart-sequence", isDropAtEnd ? "drop-at-end" : "", section.items.length ? "" : "empty-sequence"].filter(Boolean).join(" ");
   return React.createElement("section", {
-    className: active ? "chart-section active-section" : "chart-section",
+    className: sectionClass,
     onClick: onSelect,
-    onDragOver: event => event.preventDefault(),
+    onDragOver: event => {
+      event.preventDefault();
+      onDragOverAtEnd();
+    },
     onDrop: event => {
       event.preventDefault();
       onDropAt(section.items.length);
@@ -1545,29 +1574,43 @@ function ChartSection({
     },
     title: "\u5220\u9664\u6BB5\u843D"
   }, "x"))), React.createElement("div", {
-    className: "chart-sequence"
+    className: sequenceClass
   }, section.items.length ? children : React.createElement("div", {
     className: "section-empty"
   }, "\u628A\u548C\u5F26\u5361\u7247\u62D6\u5230\u8FD9\u91CC\uFF0C\u6216\u9009\u4E2D\u672C\u6BB5\u540E\u70B9\u201C\u52A0\u5165\u201D\u3002")));
 }
 function ChartItem({
   item,
-  index,
-  sectionId,
+  isDragging,
+  isDropTarget,
   onDragStart,
+  onDragOverBefore,
+  onDragEnd,
   onDropBefore,
   onDuplicate,
   onRemove,
   onUse
 }) {
+  const cardClass = ["chart-card", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
   return React.createElement("article", {
-    className: "chart-card",
+    className: cardClass,
     draggable: "true",
     onDragStart: event => {
       event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", item.id);
       onDragStart();
     },
-    onDragOver: event => event.preventDefault(),
+    onDragEnd: onDragEnd,
+    onDragEnter: event => {
+      event.preventDefault();
+      event.stopPropagation();
+      onDragOverBefore();
+    },
+    onDragOver: event => {
+      event.preventDefault();
+      event.stopPropagation();
+      onDragOverBefore();
+    },
     onDrop: event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1575,18 +1618,13 @@ function ChartItem({
     }
   }, React.createElement("div", {
     className: "chart-card-main"
-  }, React.createElement("span", {
-    className: "chart-index"
-  }, index + 1), React.createElement("div", {
-    className: "chart-item-body"
-  }, React.createElement("div", {
+  }, React.createElement("h3", null, item.name), React.createElement("div", {
     className: "chart-diagram-wrap"
   }, React.createElement(ChordDiagram, {
     shape: item.frets,
-    root: item.root
-  })), React.createElement("div", null, React.createElement("h3", null, item.name), React.createElement("p", null, React.createElement("span", {
-    className: "shape-code"
-  }, item.shape), " \xB7 ", item.position), React.createElement("p", null, item.source)))), React.createElement("div", {
+    root: item.root,
+    startAtLowestFret: true
+  }))), React.createElement("div", {
     className: "chart-card-actions"
   }, React.createElement("button", {
     className: "icon-button",
@@ -1635,13 +1673,19 @@ function VoicingCard({
 }
 function ChordDiagram({
   shape,
-  root
+  root,
+  startAtLowestFret = false
 }) {
   const played = shape.filter(fret => fret !== null);
   const positive = played.filter(fret => fret > 0);
   const minPositive = positive.length ? Math.min(...positive) : 1;
   const maxFret = played.length ? Math.max(...played) : 4;
-  const firstFret = played.some(fret => fret === 0) || minPositive <= 1 ? 1 : minPositive;
+  let firstFret = minPositive;
+  if (startAtLowestFret && minPositive > 1) {
+    firstFret = minPositive;
+  } else if (played.some(fret => fret === 0) || minPositive <= 1) {
+    firstFret = 1;
+  }
   const fretCount = Math.max(4, Math.min(6, maxFret - firstFret + 1));
   const width = 260;
   const height = 238;
