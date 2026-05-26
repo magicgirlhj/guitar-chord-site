@@ -1404,8 +1404,22 @@ function ChordInputDiagram({
     length: 5
   }, (_, index) => baseFret + index);
   const quickPositions = [1, 3, 5, 7, 9, 12];
+  const strings = TUNING.map((string, index) => ({
+    ...string,
+    index,
+    x: 8 + index * 16.8
+  }));
+  const frets = fretRows.map((fret, index) => ({
+    fret,
+    y: 16 + index * 17
+  }));
+  const boardX = percent => `calc(48px + (100% - 66px) * ${percent / 100})`;
+  const boardY = percent => `calc(28px + (100% - 82px) * ${percent / 100})`;
   function moveBase(delta) {
     onBaseFretChange(Math.max(1, Math.min(20, baseFret + delta)));
+  }
+  function toggleMute(index) {
+    onStringValueChange(index, parsedValues[index] === null ? 0 : null);
   }
   return React.createElement("div", {
     className: "fretboard-editor"
@@ -1433,30 +1447,66 @@ function ChordInputDiagram({
   }, TUNING.map((string, index) => React.createElement("div", {
     className: "string-status",
     key: `status-${string.label}`
-  }, React.createElement("span", null, string.label, " ", string.note), React.createElement("div", null, React.createElement("button", {
+  }, React.createElement("span", null, string.label, " ", string.note), React.createElement("button", {
     className: parsedValues[index] === null ? "mini-toggle active-mini" : "mini-toggle",
-    onClick: () => onStringValueChange(index, null),
-    title: "\u8FD9\u6839\u5F26\u4E0D\u5F39"
-  }, "x"), React.createElement("button", {
-    className: parsedValues[index] === 0 ? "mini-toggle active-mini" : "mini-toggle",
-    onClick: () => onStringValueChange(index, 0),
-    title: "\u7A7A\u5F26"
-  }, "0"))))), React.createElement("div", {
-    className: "click-fretboard"
-  }, fretRows.map(fret => React.createElement("div", {
-    className: "fret-row",
-    key: `row-${fret}`
-  }, React.createElement("span", {
-    className: "fret-row-label"
-  }, fret, "fr"), TUNING.map((string, stringIndex) => {
-    const selected = parsedValues[stringIndex] === fret;
+    onClick: () => toggleMute(index),
+    title: parsedValues[index] === null ? "取消闷音，设为空弦" : "这根弦不弹"
+  }, "x")))), React.createElement("div", {
+    className: "click-fretboard",
+    style: {
+      "--fret-count": fretRows.length
+    }
+  }, React.createElement("svg", {
+    className: "fretboard-lines",
+    viewBox: "0 0 100 100",
+    "aria-hidden": "true",
+    preserveAspectRatio: "none"
+  }, strings.map(string => React.createElement("line", {
+    className: "input-string-line",
+    x1: string.x,
+    x2: string.x,
+    y1: "7",
+    y2: "93",
+    key: string.label
+  })), Array.from({
+    length: fretRows.length + 1
+  }).map((_, index) => {
+    const y = 7 + index * 17;
+    return React.createElement("line", {
+      className: "input-fret-line",
+      x1: "8",
+      x2: "92",
+      y1: y,
+      y2: y,
+      key: `fretline-${index}`
+    });
+  })), fretRows.map((fret, fretIndex) => React.createElement("span", {
+    className: "fret-row-label",
+    style: {
+      top: boardY(7 + fretIndex * 17 + 8.5)
+    },
+    key: `label-${fret}`
+  }, fret, "fr")), strings.map(string => frets.map(({
+    fret,
+    y
+  }) => {
+    const selected = parsedValues[string.index] === fret;
     return React.createElement("button", {
-      className: selected ? "fret-cell selected-fret" : "fret-cell",
+      className: selected ? "string-dot selected-fret" : "string-dot",
       key: `${string.label}-${fret}`,
-      onClick: () => onStringValueChange(stringIndex, fret),
+      style: {
+        left: boardX(string.x),
+        top: boardY(y)
+      },
+      onClick: () => onStringValueChange(string.index, fret),
       "aria-label": `${string.label} ${string.note} 第 ${fret} 品`
     }, selected ? fret : "");
-  })))));
+  })), React.createElement("div", {
+    className: "open-string-row"
+  }, strings.map(string => React.createElement("span", {
+    className: parsedValues[string.index] === 0 ? "open-string active-open-string" : "open-string",
+    key: string.label
+  }, parsedValues[string.index] === null ? "x" : parsedValues[string.index] === 0 ? "空" : "")))));
 }
 function ChartSection({
   section,
