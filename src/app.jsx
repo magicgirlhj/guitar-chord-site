@@ -251,6 +251,9 @@ const FRET_EXAMPLES = [
   { label: "F", frets: ["1", "3", "3", "2", "1", "1"] },
 ];
 const CHART_STORAGE_KEY = "guitar-chord-chart-sequence-v1";
+const SUPABASE_CONFIG_STORAGE_KEY = "guitar-chord-supabase-config-v1";
+const SUPABASE_LIBRARY_TABLE = "guitar_chart_libraries";
+const CLOUD_SAVE_DELAY = 900;
 const DEFAULT_SECTION_TITLE = "前奏";
 
 function mod(value, size = 12) {
@@ -738,6 +741,85 @@ function loadChartLibrary() {
   }
 }
 
+function normalizeSupabaseConfig(config = {}) {
+  return {
+    url: String(config.url || "").trim(),
+    anonKey: String(config.anonKey || config.publishableKey || "").trim(),
+  };
+}
+
+function embeddedSupabaseConfig() {
+  return normalizeSupabaseConfig(window.GUITAR_CHORD_SUPABASE || {});
+}
+
+function loadSupabaseConfig() {
+  try {
+    const stored = window.localStorage.getItem(SUPABASE_CONFIG_STORAGE_KEY);
+    const localConfig = stored ? normalizeSupabaseConfig(JSON.parse(stored)) : null;
+
+    if (localConfig?.url && localConfig?.anonKey) return localConfig;
+  } catch {
+    // Fall back to the build-time config below.
+  }
+
+  return embeddedSupabaseConfig();
+}
+
+function saveSupabaseConfig(config) {
+  const normalized = normalizeSupabaseConfig(config);
+
+  if (normalized.url && normalized.anonKey) {
+    window.localStorage.setItem(SUPABASE_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
+  } else {
+    window.localStorage.removeItem(SUPABASE_CONFIG_STORAGE_KEY);
+  }
+
+  return normalized;
+}
+
+function hasSupabaseConfig(config) {
+  return Boolean(config?.url && config?.anonKey);
+}
+
+function createSupabaseClient(config) {
+  if (!hasSupabaseConfig(config) || !window.supabase?.createClient) return null;
+
+  return window.supabase.createClient(config.url, config.anonKey, {
+    auth: {
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      persistSession: true,
+    },
+  });
+}
+
+function cloudRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function mergeChartLibraries(localLibrary, cloudLibrary) {
+  const local = normalizeChartLibrary(localLibrary);
+  const cloud = normalizeChartLibrary(cloudLibrary);
+  const byId = new Map();
+
+  [...cloud.charts, ...local.charts].forEach((chart) => {
+    const existing = byId.get(chart.id);
+
+    if (!existing || (chart.updatedAt || 0) >= (existing.updatedAt || 0)) {
+      byId.set(chart.id, chart);
+    }
+  });
+
+  const charts = Array.from(byId.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const activeChartId = charts.some((chart) => chart.id === local.activeChartId)
+    ? local.activeChartId
+    : charts.some((chart) => chart.id === cloud.activeChartId)
+      ? cloud.activeChartId
+      : charts[0]?.id;
+
+  return normalizeChartLibrary({ activeChartId, charts });
+}
+
 function rootFromChordName(name) {
   const parsed = parseChordName(String(name).split("/")[0]);
   return parsed.ok ? parsed.root : null;
@@ -782,7 +864,19 @@ function App() {
   const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
   const [chartMessage, setChartMessage] = useState("");
+  const [supabaseConfig, setSupabaseConfig] = useState(loadSupabaseConfig);
+  const [syncConfigDraft, setSyncConfigDraft] = useState(loadSupabaseConfig);
+  const [syncClient, setSyncClient] = useState(null);
+  const [syncUser, setSyncUser] = useState(null);
+  const [syncEmail, setSyncEmail] = useState("");
+  const [syncStatus, setSyncStatus] = useState({
+    tone: "local",
+    text: "本地保存",
+  });
+  const [showSyncSettings, setShowSyncSettings] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
   const importInputRef = useRef(null);
+  const cloudSaveTimerRef = useRef(null);
   const activeChart =
     chartLibrary.charts.find((chart) => chart.id === chartLibrary.activeChartId) || chartLibrary.charts[0];
   const chartTitle = activeChart.title;
@@ -793,10 +887,142 @@ function App() {
   const parsedChord = useMemo(() => parseChordName(chordQuery), [chordQuery]);
   const voicings = useMemo(() => (parsedChord.ok ? getVoicings(parsedChord) : []), [parsedChord]);
   const recognition = useMemo(() => identifyChord(fretValues), [fretValues]);
+  const syncConfigured = hasSupabaseConfig(supabaseConfig);
 
   useEffect(() => {
     window.localStorage.setItem(CHART_STORAGE_KEY, JSON.stringify(chartLibrary));
   }, [chartLibrary]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig(supabaseConfig)) {
+      setSyncClient(null);
+      setSyncUser(null);
+      setCloudReady(false);
+      setSyncStatus({ tone: "local", text: "未配置云同步，当前仅保存到本机。" });
+      return undefined;
+    }
+
+    const client = createSupabaseClient(supabaseConfig);
+
+    if (!client) {
+      setSyncClient(null);
+      setSyncUser(null);
+      setCloudReady(false);
+      setSyncStatus({ tone: "error", text: "Supabase 脚本未加载，暂时只能本地保存。" });
+      return undefined;
+    }
+
+    let active = true;
+    setSyncClient(client);
+    setCloudReady(false);
+    setSyncStatus({ tone: "pending", text: "正在连接云同步..." });
+
+    client.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+
+      if (error) {
+        setSyncStatus({ tone: "error", text: `登录状态读取失败：${error.message}` });
+        return;
+      }
+
+      const user = data.session?.user || null;
+      setSyncUser(user);
+      setSyncStatus(
+        user
+          ? { tone: "pending", text: "正在读取云端曲谱..." }
+          : { tone: "local", text: "云同步已配置，请先登录。" }
+      );
+    });
+
+    const { data } = client.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+
+      const user = session?.user || null;
+      setSyncUser(user);
+      setCloudReady(false);
+      setSyncStatus(
+        user
+          ? { tone: "pending", text: "正在读取云端曲谱..." }
+          : { tone: "local", text: "已退出，当前仅保存到本机。" }
+      );
+    });
+
+    return () => {
+      active = false;
+      data.subscription?.unsubscribe();
+    };
+  }, [supabaseConfig.url, supabaseConfig.anonKey]);
+
+  useEffect(() => {
+    if (!syncClient || !syncUser) return undefined;
+
+    let active = true;
+
+    async function loadCloudLibrary() {
+      setCloudReady(false);
+      setSyncStatus({ tone: "pending", text: "正在读取云端曲谱..." });
+
+      try {
+        const { data, error } = await syncClient
+          .from(SUPABASE_LIBRARY_TABLE)
+          .select("library, updated_at")
+          .eq("user_id", syncUser.id)
+          .maybeSingle();
+
+        if (!active) return;
+        if (error) throw error;
+
+        if (data?.library) {
+          setChartLibrary((localLibrary) => mergeChartLibraries(localLibrary, data.library));
+          setSyncStatus({ tone: "pending", text: "已合并云端曲谱，正在保存最新版本..." });
+        } else {
+          setSyncStatus({ tone: "pending", text: "云端还没有曲谱，正在上传本机曲谱..." });
+        }
+
+        setCloudReady(true);
+      } catch (error) {
+        if (!active) return;
+        setCloudReady(false);
+        setSyncStatus({ tone: "error", text: `云端读取失败：${error.message}` });
+      }
+    }
+
+    loadCloudLibrary();
+
+    return () => {
+      active = false;
+    };
+  }, [syncClient, syncUser?.id]);
+
+  useEffect(() => {
+    if (!syncClient || !syncUser || !cloudReady) return undefined;
+
+    window.clearTimeout(cloudSaveTimerRef.current);
+    setSyncStatus({ tone: "pending", text: "正在同步曲谱..." });
+
+    cloudSaveTimerRef.current = window.setTimeout(async () => {
+      try {
+        const library = normalizeChartLibrary(chartLibrary);
+        const { error } = await syncClient.from(SUPABASE_LIBRARY_TABLE).upsert(
+          {
+            user_id: syncUser.id,
+            library,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+
+        if (error) throw error;
+        setSyncStatus({ tone: "synced", text: `已同步到云端：${syncUser.email || "当前账号"}` });
+      } catch (error) {
+        setSyncStatus({ tone: "error", text: `云端保存失败：${error.message}` });
+      }
+    }, CLOUD_SAVE_DELAY);
+
+    return () => {
+      window.clearTimeout(cloudSaveTimerRef.current);
+    };
+  }, [chartLibrary, syncClient, syncUser?.id, cloudReady]);
 
   function updateActiveChart(updater) {
     setChartLibrary((library) => ({
@@ -1155,6 +1381,68 @@ function App() {
     }
   }
 
+  function saveSyncSettings() {
+    const normalized = saveSupabaseConfig(syncConfigDraft);
+    setSupabaseConfig(normalized);
+    setShowSyncSettings(false);
+    setCloudReady(false);
+    setSyncStatus(
+      hasSupabaseConfig(normalized)
+        ? { tone: "pending", text: "正在连接云同步..." }
+        : { tone: "local", text: "未配置云同步，当前仅保存到本机。" }
+    );
+  }
+
+  function clearSyncSettings() {
+    const emptyConfig = saveSupabaseConfig({});
+    setSupabaseConfig(emptyConfig);
+    setSyncConfigDraft(emptyConfig);
+    setShowSyncSettings(false);
+    setCloudReady(false);
+    setSyncStatus({ tone: "local", text: "已清除云同步配置，当前仅保存到本机。" });
+  }
+
+  async function sendLoginLink() {
+    const email = syncEmail.trim();
+
+    if (!syncClient) {
+      setSyncStatus({ tone: "error", text: "请先保存 Supabase 配置。" });
+      return;
+    }
+
+    if (!email) {
+      setSyncStatus({ tone: "error", text: "请输入邮箱。" });
+      return;
+    }
+
+    setSyncStatus({ tone: "pending", text: "正在发送登录链接..." });
+
+    const { error } = await syncClient.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: cloudRedirectUrl(),
+      },
+    });
+
+    setSyncStatus(
+      error
+        ? { tone: "error", text: `登录链接发送失败：${error.message}` }
+        : { tone: "pending", text: "登录链接已发送，请打开邮箱完成登录。" }
+    );
+  }
+
+  async function signOutSync() {
+    if (!syncClient) return;
+
+    const { error } = await syncClient.auth.signOut();
+    setCloudReady(false);
+    setSyncStatus(
+      error
+        ? { tone: "error", text: `退出失败：${error.message}` }
+        : { tone: "local", text: "已退出，当前仅保存到本机。" }
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -1375,6 +1663,81 @@ function App() {
               aria-label="导入曲谱 JSON"
             />
 
+            <div className="sync-card">
+              <div className="sync-state">
+                <span className={`sync-dot ${syncStatus.tone}`} aria-hidden="true" />
+                <div>
+                  <strong>{syncUser ? syncUser.email || "已登录" : "云同步"}</strong>
+                  <p>{syncStatus.text}</p>
+                </div>
+              </div>
+
+              <div className="sync-controls">
+                {syncConfigured && !syncUser ? (
+                  <>
+                    <input
+                      className="text-field sync-email"
+                      type="email"
+                      value={syncEmail}
+                      onChange={(event) => setSyncEmail(event.target.value)}
+                      placeholder="邮箱"
+                      aria-label="云同步登录邮箱"
+                    />
+                    <button className="ghost-button add-button" onClick={sendLoginLink}>
+                      登录
+                    </button>
+                  </>
+                ) : null}
+
+                {syncUser ? (
+                  <button className="ghost-button" onClick={signOutSync}>
+                    退出
+                  </button>
+                ) : null}
+
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    setSyncConfigDraft(supabaseConfig);
+                    setShowSyncSettings((value) => !value);
+                  }}
+                >
+                  设置
+                </button>
+              </div>
+
+              {showSyncSettings || !syncConfigured ? (
+                <div className="sync-settings">
+                  <input
+                    className="text-field"
+                    value={syncConfigDraft.url}
+                    onChange={(event) =>
+                      setSyncConfigDraft((config) => ({ ...config, url: event.target.value }))
+                    }
+                    placeholder="Supabase Project URL"
+                    aria-label="Supabase Project URL"
+                  />
+                  <input
+                    className="text-field"
+                    value={syncConfigDraft.anonKey}
+                    onChange={(event) =>
+                      setSyncConfigDraft((config) => ({ ...config, anonKey: event.target.value }))
+                    }
+                    placeholder="Supabase anon 或 publishable key"
+                    aria-label="Supabase anon 或 publishable key"
+                  />
+                  <div className="sync-setting-actions">
+                    <button className="ghost-button add-button" onClick={saveSyncSettings}>
+                      保存设置
+                    </button>
+                    <button className="ghost-button danger-button" onClick={clearSyncSettings}>
+                      清除
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div className="chart-library-bar">
               <label className="chart-select-field">
                 <span>当前曲谱</span>
@@ -1406,7 +1769,7 @@ function App() {
             </label>
 
             <p className="save-note">
-              曲谱库会自动保存到当前浏览器；要长期保存或换设备，请定期导出当前曲谱的 JSON 备份。
+              曲谱库会自动保存到当前浏览器；登录云同步后，会在同一账号的设备间合并保存。
             </p>
 
             <div className="chart-sections" aria-label="曲谱段落">

@@ -18,6 +18,10 @@
 
 发布文件会生成在 `dist/`。具体发布步骤见 [DEPLOY.md](./DEPLOY.md)。
 
+## 跨设备同步
+
+曲谱默认会保存到当前浏览器。要跨设备同步，可以接 Supabase；数据库和 GitHub Secrets 设置见 [SUPABASE_SETUP.md](./SUPABASE_SETUP.md)。
+
 ## 支持
 
 - 标准调弦：E A D G B e

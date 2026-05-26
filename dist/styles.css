@@ -810,6 +810,85 @@ h2 {
   display: none;
 }
 
+.sync-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #f8f1e4;
+}
+
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sync-state strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-state p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.sync-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: #c8bba8;
+}
+
+.sync-dot.pending {
+  background: var(--accent);
+}
+
+.sync-dot.synced {
+  background: #237a4b;
+}
+
+.sync-dot.error {
+  background: var(--danger);
+}
+
+.sync-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sync-email {
+  width: min(100%, 280px);
+  min-height: 38px;
+}
+
+.sync-settings {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.3fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.sync-setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .chart-title-field {
   display: grid;
   gap: 8px;
@@ -1177,6 +1256,14 @@ h2 {
   .string-dot {
     width: 26px;
     height: 32px;
+  }
+
+  .sync-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-email {
+    width: 100%;
   }
 
   .chart-sequence {

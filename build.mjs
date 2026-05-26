@@ -8,6 +8,10 @@ const filesToCopy = [
   ["vendor/react.production.min.js", "vendor/react.production.min.js"],
   ["vendor/react-dom.production.min.js", "vendor/react-dom.production.min.js"],
 ];
+const supabaseConfig = {
+  url: process.env.SUPABASE_URL || "",
+  anonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "",
+};
 
 async function write(target, content) {
   await mkdir(dirname(target), { recursive: true });
@@ -56,6 +60,8 @@ await write(
     <div id="root"></div>
     <script src="./vendor/react.production.min.js"></script>
     <script src="./vendor/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>window.GUITAR_CHORD_SUPABASE = ${JSON.stringify(supabaseConfig)};</script>
     <script src="./assets/app.js"></script>
   </body>
 </html>
