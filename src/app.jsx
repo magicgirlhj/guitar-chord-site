@@ -251,6 +251,7 @@ const FRET_EXAMPLES = [
   { label: "F", frets: ["1", "3", "3", "2", "1", "1"] },
 ];
 const CHART_STORAGE_KEY = "guitar-chord-chart-sequence-v1";
+const DEFAULT_SECTION_TITLE = "前奏";
 
 function mod(value, size = 12) {
   return ((value % size) + size) % size;
@@ -668,11 +669,32 @@ function normalizeChartItem(item) {
   };
 }
 
+function normalizeChartSection(section, index = 0) {
+  return {
+    id: section.id || createId("section"),
+    title: section.title || (index === 0 ? DEFAULT_SECTION_TITLE : `段落 ${index + 1}`),
+    items: Array.isArray(section.items) ? section.items.map(normalizeChartItem) : [],
+  };
+}
+
+function createEmptySection(title = DEFAULT_SECTION_TITLE) {
+  return normalizeChartSection({ title, items: [] });
+}
+
 function normalizeChart(chart, fallbackTitle = "未命名曲谱") {
+  const sections = Array.isArray(chart.sections)
+    ? chart.sections.map(normalizeChartSection)
+    : [normalizeChartSection({ title: DEFAULT_SECTION_TITLE, items: chart.items || [] })];
+  const safeSections = sections.length ? sections : [createEmptySection()];
+  const activeSectionId = safeSections.some((section) => section.id === chart.activeSectionId)
+    ? chart.activeSectionId
+    : safeSections[0].id;
+
   return {
     id: chart.id || createId("chart"),
     title: chart.title || fallbackTitle,
-    items: Array.isArray(chart.items) ? chart.items.map(normalizeChartItem) : [],
+    activeSectionId,
+    sections: safeSections,
     updatedAt: chart.updatedAt || Date.now(),
   };
 }
@@ -731,16 +753,40 @@ function chartItemsToText(title, items) {
   return `${title || "未命名曲谱"}\n${rows}`;
 }
 
+function chartSectionsToText(title, sections) {
+  const populated = sections.filter((section) => section.items.length);
+
+  if (!populated.length) return "";
+
+  return `${title || "未命名曲谱"}\n${populated
+    .map(
+      (section) =>
+        `\n[${section.title}]\n${section.items
+          .map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`)
+          .join("\n")}`
+    )
+    .join("\n")}`;
+}
+
+function flattenSections(sections) {
+  return sections.flatMap((section) => section.items);
+}
+
 function App() {
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
+  const [editorBaseFret, setEditorBaseFret] = useState(1);
+  const [draggedChord, setDraggedChord] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
   const [chartMessage, setChartMessage] = useState("");
   const importInputRef = useRef(null);
   const activeChart =
     chartLibrary.charts.find((chart) => chart.id === chartLibrary.activeChartId) || chartLibrary.charts[0];
   const chartTitle = activeChart.title;
-  const chartItems = activeChart.items;
+  const chartSections = activeChart.sections;
+  const activeSection =
+    chartSections.find((section) => section.id === activeChart.activeSectionId) || chartSections[0];
+  const chartItems = flattenSections(chartSections);
   const parsedChord = useMemo(() => parseChordName(chordQuery), [chordQuery]);
   const voicings = useMemo(() => (parsedChord.ok ? getVoicings(parsedChord) : []), [parsedChord]);
   const recognition = useMemo(() => identifyChord(fretValues), [fretValues]);
@@ -769,8 +815,25 @@ function App() {
   }
 
   function setChartItems(updater) {
+    updateActiveSectionItems(updater);
+  }
+
+  function updateChartSections(updater) {
     updateActiveChart((chart) => ({
-      items: typeof updater === "function" ? updater(chart.items) : updater,
+      sections: typeof updater === "function" ? updater(chart.sections) : updater,
+    }));
+  }
+
+  function updateActiveSectionItems(updater) {
+    updateActiveChart((chart) => ({
+      sections: chart.sections.map((section) =>
+        section.id === chart.activeSectionId
+          ? {
+              ...section,
+              items: typeof updater === "function" ? updater(section.items) : updater,
+            }
+          : section
+      ),
     }));
   }
 
@@ -783,7 +846,7 @@ function App() {
   function createChart() {
     const chart = normalizeChart({
       title: `新曲谱 ${chartLibrary.charts.length + 1}`,
-      items: [],
+      sections: [createEmptySection()],
     });
 
     setChartLibrary((library) => ({
@@ -796,7 +859,11 @@ function App() {
   function deleteActiveChart() {
     setChartLibrary((library) => {
       if (library.charts.length <= 1) {
-        const chart = normalizeChart({ id: library.activeChartId, title: "未命名曲谱", items: [] });
+        const chart = normalizeChart({
+          id: library.activeChartId,
+          title: "未命名曲谱",
+          sections: [createEmptySection()],
+        });
         return { activeChartId: chart.id, charts: [chart] };
       }
 
@@ -811,6 +878,8 @@ function App() {
 
   function useShape(frets) {
     setFretValues(frets.map((fret) => (fret === null ? "x" : String(fret))));
+    const stats = shapeStats(frets);
+    setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
     requestAnimationFrame(() => {
       document.querySelector(".reverse-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -828,7 +897,7 @@ function App() {
     };
 
     setChartItems((items) => [...items, item]);
-    setChartMessage(`已加入：${name}`);
+    setChartMessage(`已加入到「${activeSection.title}」：${name}`);
   }
 
   function addCurrentInputToChart() {
@@ -866,8 +935,135 @@ function App() {
     setChartItems((items) => items.filter((item) => item.id !== id));
   }
 
+  function createSection() {
+    const section = createEmptySection(`段落 ${chartSections.length + 1}`);
+
+    updateActiveChart((chart) => ({
+      activeSectionId: section.id,
+      sections: [...chart.sections, section],
+    }));
+    setChartMessage(`已添加段落：${section.title}`);
+  }
+
+  function selectSection(sectionId) {
+    updateActiveChart({ activeSectionId: sectionId });
+  }
+
+  function renameSection(sectionId, title) {
+    updateChartSections((sections) =>
+      sections.map((section) => (section.id === sectionId ? { ...section, title } : section))
+    );
+  }
+
+  function deleteSection(sectionId) {
+    updateActiveChart((chart) => {
+      if (chart.sections.length <= 1) {
+        return {
+          activeSectionId: chart.sections[0].id,
+          sections: [{ ...chart.sections[0], title: DEFAULT_SECTION_TITLE, items: [] }],
+        };
+      }
+
+      const sectionIndex = chart.sections.findIndex((section) => section.id === sectionId);
+      const sections = chart.sections.filter((section) => section.id !== sectionId);
+      const activeSectionId =
+        chart.activeSectionId === sectionId
+          ? (sections[Math.max(0, sectionIndex - 1)] || sections[0]).id
+          : chart.activeSectionId;
+
+      return { activeSectionId, sections };
+    });
+    setChartMessage("已删除段落。");
+  }
+
+  function removeSectionItem(sectionId, itemId) {
+    updateChartSections((sections) =>
+      sections.map((section) =>
+        section.id === sectionId
+          ? { ...section, items: section.items.filter((item) => item.id !== itemId) }
+          : section
+      )
+    );
+  }
+
+  function duplicateSectionItem(sectionId, itemId) {
+    updateChartSections((sections) =>
+      sections.map((section) => {
+        if (section.id !== sectionId) return section;
+
+        const index = section.items.findIndex((item) => item.id === itemId);
+        if (index < 0) return section;
+
+        const copy = {
+          ...section.items[index],
+          id: createId("chord"),
+          source: `${section.items[index].source || "曲谱记录"} · 复制`,
+        };
+        const items = [...section.items];
+        items.splice(index + 1, 0, copy);
+        return { ...section, items };
+      })
+    );
+    setChartMessage("已复制和弦卡片。");
+  }
+
+  function moveChartItemToSection(itemId, fromSectionId, toSectionId, toIndex) {
+    updateChartSections((sections) => {
+      let movingItem = null;
+      let fromIndex = -1;
+      const withoutItem = sections.map((section) => {
+        if (section.id !== fromSectionId) return section;
+
+        fromIndex = section.items.findIndex((item) => item.id === itemId);
+        if (fromIndex < 0) return section;
+
+        movingItem = section.items[fromIndex];
+        return { ...section, items: section.items.filter((item) => item.id !== itemId) };
+      });
+
+      if (!movingItem) return sections;
+
+      return withoutItem.map((section) => {
+        if (section.id !== toSectionId) return section;
+
+        const adjustedIndex =
+          fromSectionId === toSectionId && fromIndex >= 0 && fromIndex < toIndex ? toIndex - 1 : toIndex;
+        const insertIndex = Math.max(0, Math.min(adjustedIndex, section.items.length));
+        const items = [...section.items];
+        items.splice(insertIndex, 0, movingItem);
+        return { ...section, items };
+      });
+    });
+  }
+
+  function handleChartDrop(sectionId, index) {
+    if (!draggedChord) return;
+
+    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    setDraggedChord(null);
+  }
+
+  function setStringValue(index, value) {
+    setFretValues((values) => {
+      const next = [...values];
+      next[index] = value === null ? "x" : String(value);
+      return next;
+    });
+  }
+
+  function resetEditor() {
+    setFretValues(["x", "x", "x", "x", "x", "x"]);
+  }
+
+  function setExampleFrets(frets) {
+    setFretValues(frets);
+    const parsed = frets.map(parseFret);
+    const stats = shapeStats(parsed);
+    setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
+  }
+
   async function copyChart() {
-    const text = chartItemsToText(chartTitle, chartItems);
+    const text = chartSectionsToText(chartTitle, chartSections);
 
     if (!text) {
       setChartMessage("曲谱还是空的。");
@@ -921,7 +1117,7 @@ function App() {
         : imported?.charts
           ? imported.charts.map((chart) => normalizeChart({ ...chart, id: createId("chart") }))
           : [normalizeChart(Array.isArray(imported) ? { title: "导入曲谱", items: imported } : imported)];
-      const validCharts = importedCharts.filter((chart) => Array.isArray(chart.items));
+      const validCharts = importedCharts.filter((chart) => Array.isArray(chart.sections));
 
       if (!validCharts.length) {
         setChartMessage("导入失败，文件里没有可用曲谱。");
@@ -1043,34 +1239,19 @@ function App() {
             <div className="panel-header compact-header">
               <div className="panel-title">
                 <span className="eyebrow">Reverse Finder</span>
-                <h2>输入按法，识别可能和弦</h2>
+                <h2>点按和弦图，识别可能和弦</h2>
               </div>
-              <span className="hint">从 6 弦到 1 弦输入品位；x 表示不弹。</span>
+              <span className="hint">上方选 x 或空弦，图中点品位；可切换不同把位。</span>
             </div>
 
             <div className="reverse-layout">
               <div className="reverse-input">
-                <div className="identifier-grid">
-                  {TUNING.map((string, index) => (
-                    <div className="string-field" key={`${string.label}-${string.note}`}>
-                      <label htmlFor={`string-${index}`}>
-                        {string.label} {string.note}
-                      </label>
-                      <input
-                        id={`string-${index}`}
-                        className="fret-field"
-                        value={fretValues[index]}
-                        inputMode="numeric"
-                        onChange={(event) => {
-                          const next = [...fretValues];
-                          next[index] = event.target.value;
-                          setFretValues(next);
-                        }}
-                        aria-label={`${string.label} ${string.note} 品位`}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <ChordInputDiagram
+                  baseFret={editorBaseFret}
+                  values={fretValues}
+                  onBaseFretChange={setEditorBaseFret}
+                  onStringValueChange={setStringValue}
+                />
 
                 <div className="summary-strip compact-summary">
                   <span className="metric">
@@ -1088,10 +1269,13 @@ function App() {
 
                 <div className="chip-row compact-examples" aria-label="品位输入示例">
                   {FRET_EXAMPLES.map((example) => (
-                    <button className="chip" key={example.label} onClick={() => setFretValues(example.frets)}>
+                    <button className="chip" key={example.label} onClick={() => setExampleFrets(example.frets)}>
                       {example.label}: {example.frets.join(" ")}
                     </button>
                   ))}
+                  <button className="chip" onClick={resetEditor}>
+                    清空
+                  </button>
                 </div>
 
                 <button className="primary-button add-current-button" onClick={addCurrentInputToChart}>
@@ -1142,6 +1326,9 @@ function App() {
                 <button className="ghost-button add-button" onClick={createChart}>
                   新建
                 </button>
+                <button className="ghost-button add-button" onClick={createSection}>
+                  添加段落
+                </button>
                 <button className="ghost-button" onClick={copyChart}>
                   复制
                 </button>
@@ -1155,7 +1342,7 @@ function App() {
                   删除当前
                 </button>
                 <button className="ghost-button danger-button" onClick={() => setChartItems([])}>
-                  清空
+                  清空段落
                 </button>
               </div>
             </div>
@@ -1180,7 +1367,7 @@ function App() {
                 >
                   {chartLibrary.charts.map((chart) => (
                     <option value={chart.id} key={chart.id}>
-                      {chart.title || "未命名曲谱"} ({chart.items.length})
+                      {chart.title || "未命名曲谱"} ({flattenSections(chart.sections || []).length})
                     </option>
                   ))}
                 </select>
@@ -1203,23 +1390,36 @@ function App() {
               曲谱库会自动保存到当前浏览器；要长期保存或换设备，请定期导出当前曲谱的 JSON 备份。
             </p>
 
-            {chartItems.length ? (
-              <div className="chart-sequence" aria-label="曲谱和弦序列">
-                {chartItems.map((item, index) => (
-                  <ChartItem
-                    item={item}
-                    index={index}
-                    total={chartItems.length}
-                    key={item.id}
-                    onMove={moveChartItem}
-                    onRemove={removeChartItem}
-                    onUse={(frets) => useShape(frets)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">从上方按法卡片点“加入”，或在识别区输入按法后点“加入曲谱”。</div>
-            )}
+            <div className="chart-sections" aria-label="曲谱段落">
+              {chartSections.map((section) => (
+                <ChartSection
+                  section={section}
+                  active={section.id === activeChart.activeSectionId}
+                  key={section.id}
+                  onSelect={() => selectSection(section.id)}
+                  onRename={(title) => renameSection(section.id, title)}
+                  onDelete={() => deleteSection(section.id)}
+                  onDropAt={(index) => handleChartDrop(section.id, index)}
+                >
+                  {section.items.map((item, index) => (
+                    <ChartItem
+                      item={item}
+                      index={index}
+                      sectionId={section.id}
+                      key={item.id}
+                      onDragStart={() => {
+                        selectSection(section.id);
+                        setDraggedChord({ sectionId: section.id, itemId: item.id });
+                      }}
+                      onDropBefore={() => handleChartDrop(section.id, index)}
+                      onDuplicate={() => duplicateSectionItem(section.id, item.id)}
+                      onRemove={() => removeSectionItem(section.id, item.id)}
+                      onUse={(frets) => useShape(frets)}
+                    />
+                  ))}
+                </ChartSection>
+              ))}
+            </div>
 
             {chartMessage ? <p className="chart-message">{chartMessage}</p> : null}
           </div>
@@ -1233,9 +1433,156 @@ function App() {
   );
 }
 
-function ChartItem({ item, index, total, onMove, onRemove, onUse }) {
+function ChordInputDiagram({ baseFret, values, onBaseFretChange, onStringValueChange }) {
+  const parsedValues = values.map(parseFret);
+  const fretRows = Array.from({ length: 5 }, (_, index) => baseFret + index);
+  const quickPositions = [1, 3, 5, 7, 9, 12];
+
+  function moveBase(delta) {
+    onBaseFretChange(Math.max(1, Math.min(20, baseFret + delta)));
+  }
+
   return (
-    <article className="chart-card">
+    <div className="fretboard-editor">
+      <div className="fretboard-toolbar">
+        <div>
+          <span className="eyebrow">Chord Input</span>
+          <h3>点击和弦图输入按法</h3>
+        </div>
+        <div className="position-control" aria-label="选择把位">
+          <button className="ghost-button" onClick={() => moveBase(-1)}>
+            -
+          </button>
+          <span>{baseFret} 把位</span>
+          <button className="ghost-button" onClick={() => moveBase(1)}>
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className="position-chips">
+        {quickPositions.map((position) => (
+          <button
+            className={position === baseFret ? "chip active-chip" : "chip"}
+            key={position}
+            onClick={() => onBaseFretChange(position)}
+          >
+            {position}
+          </button>
+        ))}
+      </div>
+
+      <div className="string-status-grid">
+        {TUNING.map((string, index) => (
+          <div className="string-status" key={`status-${string.label}`}>
+            <span>
+              {string.label} {string.note}
+            </span>
+            <div>
+              <button
+                className={parsedValues[index] === null ? "mini-toggle active-mini" : "mini-toggle"}
+                onClick={() => onStringValueChange(index, null)}
+                title="这根弦不弹"
+              >
+                x
+              </button>
+              <button
+                className={parsedValues[index] === 0 ? "mini-toggle active-mini" : "mini-toggle"}
+                onClick={() => onStringValueChange(index, 0)}
+                title="空弦"
+              >
+                0
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="click-fretboard">
+        {fretRows.map((fret) => (
+          <div className="fret-row" key={`row-${fret}`}>
+            <span className="fret-row-label">{fret}fr</span>
+            {TUNING.map((string, stringIndex) => {
+              const selected = parsedValues[stringIndex] === fret;
+              return (
+                <button
+                  className={selected ? "fret-cell selected-fret" : "fret-cell"}
+                  key={`${string.label}-${fret}`}
+                  onClick={() => onStringValueChange(stringIndex, fret)}
+                  aria-label={`${string.label} ${string.note} 第 ${fret} 品`}
+                >
+                  {selected ? fret : ""}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChartSection({ section, active, children, onSelect, onRename, onDelete, onDropAt }) {
+  return (
+    <section
+      className={active ? "chart-section active-section" : "chart-section"}
+      onClick={onSelect}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDropAt(section.items.length);
+      }}
+    >
+      <div className="chart-section-header">
+        <label>
+          <span>段落</span>
+          <input
+            className="section-title-input"
+            value={section.title}
+            onChange={(event) => onRename(event.target.value)}
+            onFocus={onSelect}
+            aria-label={`${section.title} 段落名称`}
+          />
+        </label>
+        <div className="section-meta">
+          {active ? <span className="active-section-pill">加入目标</span> : null}
+          <span>{section.items.length} 个和弦</span>
+          <button
+            className="icon-button danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            title="删除段落"
+          >
+            x
+          </button>
+        </div>
+      </div>
+
+      <div className="chart-sequence">
+        {section.items.length ? children : <div className="section-empty">把和弦卡片拖到这里，或选中本段后点“加入”。</div>}
+      </div>
+    </section>
+  );
+}
+
+function ChartItem({ item, index, sectionId, onDragStart, onDropBefore, onDuplicate, onRemove, onUse }) {
+  return (
+    <article
+      className="chart-card"
+      draggable="true"
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        onDragStart();
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onDropBefore();
+      }}
+    >
       <div className="chart-card-main">
         <span className="chart-index">{index + 1}</span>
         <div className="chart-item-body">
@@ -1252,17 +1599,14 @@ function ChartItem({ item, index, total, onMove, onRemove, onUse }) {
         </div>
       </div>
       <div className="chart-card-actions">
-        <button className="ghost-button" disabled={index === 0} onClick={() => onMove(item.id, -1)}>
-          上移
-        </button>
-        <button className="ghost-button" disabled={index === total - 1} onClick={() => onMove(item.id, 1)}>
-          下移
-        </button>
-        <button className="ghost-button" onClick={() => onUse(item.frets)}>
+        <button className="icon-button" onClick={() => onUse(item.frets)} title="带入识别">
           识别
         </button>
-        <button className="ghost-button danger-button" onClick={() => onRemove(item.id)}>
-          删除
+        <button className="icon-button" onClick={onDuplicate} title="复制这个和弦">
+          复制
+        </button>
+        <button className="icon-button danger-button" onClick={onRemove} title="删除">
+          x
         </button>
       </div>
     </article>

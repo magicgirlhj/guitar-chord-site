@@ -423,6 +423,7 @@ const FRET_EXAMPLES = [{
   frets: ["1", "3", "3", "2", "1", "1"]
 }];
 const CHART_STORAGE_KEY = "guitar-chord-chart-sequence-v1";
+const DEFAULT_SECTION_TITLE = "前奏";
 function mod(value, size = 12) {
   return (value % size + size) % size;
 }
@@ -733,11 +734,31 @@ function normalizeChartItem(item) {
     source: item.source || "曲谱记录"
   };
 }
+function normalizeChartSection(section, index = 0) {
+  return {
+    id: section.id || createId("section"),
+    title: section.title || (index === 0 ? DEFAULT_SECTION_TITLE : `段落 ${index + 1}`),
+    items: Array.isArray(section.items) ? section.items.map(normalizeChartItem) : []
+  };
+}
+function createEmptySection(title = DEFAULT_SECTION_TITLE) {
+  return normalizeChartSection({
+    title,
+    items: []
+  });
+}
 function normalizeChart(chart, fallbackTitle = "未命名曲谱") {
+  const sections = Array.isArray(chart.sections) ? chart.sections.map(normalizeChartSection) : [normalizeChartSection({
+    title: DEFAULT_SECTION_TITLE,
+    items: chart.items || []
+  })];
+  const safeSections = sections.length ? sections : [createEmptySection()];
+  const activeSectionId = safeSections.some(section => section.id === chart.activeSectionId) ? chart.activeSectionId : safeSections[0].id;
   return {
     id: chart.id || createId("chart"),
     title: chart.title || fallbackTitle,
-    items: Array.isArray(chart.items) ? chart.items.map(normalizeChartItem) : [],
+    activeSectionId,
+    sections: safeSections,
     updatedAt: chart.updatedAt || Date.now()
   };
 }
@@ -797,15 +818,27 @@ function chartItemsToText(title, items) {
   const rows = items.map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`).join("\n");
   return `${title || "未命名曲谱"}\n${rows}`;
 }
+function chartSectionsToText(title, sections) {
+  const populated = sections.filter(section => section.items.length);
+  if (!populated.length) return "";
+  return `${title || "未命名曲谱"}\n${populated.map(section => `\n[${section.title}]\n${section.items.map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`).join("\n")}`).join("\n")}`;
+}
+function flattenSections(sections) {
+  return sections.flatMap(section => section.items);
+}
 function App() {
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
+  const [editorBaseFret, setEditorBaseFret] = useState(1);
+  const [draggedChord, setDraggedChord] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
   const [chartMessage, setChartMessage] = useState("");
   const importInputRef = useRef(null);
   const activeChart = chartLibrary.charts.find(chart => chart.id === chartLibrary.activeChartId) || chartLibrary.charts[0];
   const chartTitle = activeChart.title;
-  const chartItems = activeChart.items;
+  const chartSections = activeChart.sections;
+  const activeSection = chartSections.find(section => section.id === activeChart.activeSectionId) || chartSections[0];
+  const chartItems = flattenSections(chartSections);
   const parsedChord = useMemo(() => parseChordName(chordQuery), [chordQuery]);
   const voicings = useMemo(() => parsedChord.ok ? getVoicings(parsedChord) : [], [parsedChord]);
   const recognition = useMemo(() => identifyChord(fretValues), [fretValues]);
@@ -828,8 +861,19 @@ function App() {
     });
   }
   function setChartItems(updater) {
+    updateActiveSectionItems(updater);
+  }
+  function updateChartSections(updater) {
     updateActiveChart(chart => ({
-      items: typeof updater === "function" ? updater(chart.items) : updater
+      sections: typeof updater === "function" ? updater(chart.sections) : updater
+    }));
+  }
+  function updateActiveSectionItems(updater) {
+    updateActiveChart(chart => ({
+      sections: chart.sections.map(section => section.id === chart.activeSectionId ? {
+        ...section,
+        items: typeof updater === "function" ? updater(section.items) : updater
+      } : section)
     }));
   }
   function selectChart(id) {
@@ -843,7 +887,7 @@ function App() {
   function createChart() {
     const chart = normalizeChart({
       title: `新曲谱 ${chartLibrary.charts.length + 1}`,
-      items: []
+      sections: [createEmptySection()]
     });
     setChartLibrary(library => ({
       activeChartId: chart.id,
@@ -857,7 +901,7 @@ function App() {
         const chart = normalizeChart({
           id: library.activeChartId,
           title: "未命名曲谱",
-          items: []
+          sections: [createEmptySection()]
         });
         return {
           activeChartId: chart.id,
@@ -876,6 +920,8 @@ function App() {
   }
   function useShape(frets) {
     setFretValues(frets.map(fret => fret === null ? "x" : String(fret)));
+    const stats = shapeStats(frets);
+    setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
     requestAnimationFrame(() => {
       document.querySelector(".reverse-panel")?.scrollIntoView({
         behavior: "smooth",
@@ -894,7 +940,7 @@ function App() {
       source
     };
     setChartItems(items => [...items, item]);
-    setChartMessage(`已加入：${name}`);
+    setChartMessage(`已加入到「${activeSection.title}」：${name}`);
   }
   function addCurrentInputToChart() {
     const parsedFrets = fretValues.map(parseFret);
@@ -923,8 +969,123 @@ function App() {
   function removeChartItem(id) {
     setChartItems(items => items.filter(item => item.id !== id));
   }
+  function createSection() {
+    const section = createEmptySection(`段落 ${chartSections.length + 1}`);
+    updateActiveChart(chart => ({
+      activeSectionId: section.id,
+      sections: [...chart.sections, section]
+    }));
+    setChartMessage(`已添加段落：${section.title}`);
+  }
+  function selectSection(sectionId) {
+    updateActiveChart({
+      activeSectionId: sectionId
+    });
+  }
+  function renameSection(sectionId, title) {
+    updateChartSections(sections => sections.map(section => section.id === sectionId ? {
+      ...section,
+      title
+    } : section));
+  }
+  function deleteSection(sectionId) {
+    updateActiveChart(chart => {
+      if (chart.sections.length <= 1) {
+        return {
+          activeSectionId: chart.sections[0].id,
+          sections: [{
+            ...chart.sections[0],
+            title: DEFAULT_SECTION_TITLE,
+            items: []
+          }]
+        };
+      }
+      const sectionIndex = chart.sections.findIndex(section => section.id === sectionId);
+      const sections = chart.sections.filter(section => section.id !== sectionId);
+      const activeSectionId = chart.activeSectionId === sectionId ? (sections[Math.max(0, sectionIndex - 1)] || sections[0]).id : chart.activeSectionId;
+      return {
+        activeSectionId,
+        sections
+      };
+    });
+    setChartMessage("已删除段落。");
+  }
+  function removeSectionItem(sectionId, itemId) {
+    updateChartSections(sections => sections.map(section => section.id === sectionId ? {
+      ...section,
+      items: section.items.filter(item => item.id !== itemId)
+    } : section));
+  }
+  function duplicateSectionItem(sectionId, itemId) {
+    updateChartSections(sections => sections.map(section => {
+      if (section.id !== sectionId) return section;
+      const index = section.items.findIndex(item => item.id === itemId);
+      if (index < 0) return section;
+      const copy = {
+        ...section.items[index],
+        id: createId("chord"),
+        source: `${section.items[index].source || "曲谱记录"} · 复制`
+      };
+      const items = [...section.items];
+      items.splice(index + 1, 0, copy);
+      return {
+        ...section,
+        items
+      };
+    }));
+    setChartMessage("已复制和弦卡片。");
+  }
+  function moveChartItemToSection(itemId, fromSectionId, toSectionId, toIndex) {
+    updateChartSections(sections => {
+      let movingItem = null;
+      let fromIndex = -1;
+      const withoutItem = sections.map(section => {
+        if (section.id !== fromSectionId) return section;
+        fromIndex = section.items.findIndex(item => item.id === itemId);
+        if (fromIndex < 0) return section;
+        movingItem = section.items[fromIndex];
+        return {
+          ...section,
+          items: section.items.filter(item => item.id !== itemId)
+        };
+      });
+      if (!movingItem) return sections;
+      return withoutItem.map(section => {
+        if (section.id !== toSectionId) return section;
+        const adjustedIndex = fromSectionId === toSectionId && fromIndex >= 0 && fromIndex < toIndex ? toIndex - 1 : toIndex;
+        const insertIndex = Math.max(0, Math.min(adjustedIndex, section.items.length));
+        const items = [...section.items];
+        items.splice(insertIndex, 0, movingItem);
+        return {
+          ...section,
+          items
+        };
+      });
+    });
+  }
+  function handleChartDrop(sectionId, index) {
+    if (!draggedChord) return;
+    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    setDraggedChord(null);
+  }
+  function setStringValue(index, value) {
+    setFretValues(values => {
+      const next = [...values];
+      next[index] = value === null ? "x" : String(value);
+      return next;
+    });
+  }
+  function resetEditor() {
+    setFretValues(["x", "x", "x", "x", "x", "x"]);
+  }
+  function setExampleFrets(frets) {
+    setFretValues(frets);
+    const parsed = frets.map(parseFret);
+    const stats = shapeStats(parsed);
+    setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
+  }
   async function copyChart() {
-    const text = chartItemsToText(chartTitle, chartItems);
+    const text = chartSectionsToText(chartTitle, chartSections);
     if (!text) {
       setChartMessage("曲谱还是空的。");
       return;
@@ -973,7 +1134,7 @@ function App() {
         title: "导入曲谱",
         items: imported
       } : imported)];
-      const validCharts = importedCharts.filter(chart => Array.isArray(chart.items));
+      const validCharts = importedCharts.filter(chart => Array.isArray(chart.sections));
       if (!validCharts.length) {
         setChartMessage("导入失败，文件里没有可用曲谱。");
         return;
@@ -1079,31 +1240,18 @@ function App() {
     className: "panel-title"
   }, React.createElement("span", {
     className: "eyebrow"
-  }, "Reverse Finder"), React.createElement("h2", null, "\u8F93\u5165\u6309\u6CD5\uFF0C\u8BC6\u522B\u53EF\u80FD\u548C\u5F26")), React.createElement("span", {
+  }, "Reverse Finder"), React.createElement("h2", null, "\u70B9\u6309\u548C\u5F26\u56FE\uFF0C\u8BC6\u522B\u53EF\u80FD\u548C\u5F26")), React.createElement("span", {
     className: "hint"
-  }, "\u4ECE 6 \u5F26\u5230 1 \u5F26\u8F93\u5165\u54C1\u4F4D\uFF1Bx \u8868\u793A\u4E0D\u5F39\u3002")), React.createElement("div", {
+  }, "\u4E0A\u65B9\u9009 x \u6216\u7A7A\u5F26\uFF0C\u56FE\u4E2D\u70B9\u54C1\u4F4D\uFF1B\u53EF\u5207\u6362\u4E0D\u540C\u628A\u4F4D\u3002")), React.createElement("div", {
     className: "reverse-layout"
   }, React.createElement("div", {
     className: "reverse-input"
-  }, React.createElement("div", {
-    className: "identifier-grid"
-  }, TUNING.map((string, index) => React.createElement("div", {
-    className: "string-field",
-    key: `${string.label}-${string.note}`
-  }, React.createElement("label", {
-    htmlFor: `string-${index}`
-  }, string.label, " ", string.note), React.createElement("input", {
-    id: `string-${index}`,
-    className: "fret-field",
-    value: fretValues[index],
-    inputMode: "numeric",
-    onChange: event => {
-      const next = [...fretValues];
-      next[index] = event.target.value;
-      setFretValues(next);
-    },
-    "aria-label": `${string.label} ${string.note} 品位`
-  })))), React.createElement("div", {
+  }, React.createElement(ChordInputDiagram, {
+    baseFret: editorBaseFret,
+    values: fretValues,
+    onBaseFretChange: setEditorBaseFret,
+    onStringValueChange: setStringValue
+  }), React.createElement("div", {
     className: "summary-strip compact-summary"
   }, React.createElement("span", {
     className: "metric"
@@ -1115,8 +1263,11 @@ function App() {
   }, FRET_EXAMPLES.map(example => React.createElement("button", {
     className: "chip",
     key: example.label,
-    onClick: () => setFretValues(example.frets)
-  }, example.label, ": ", example.frets.join(" ")))), React.createElement("button", {
+    onClick: () => setExampleFrets(example.frets)
+  }, example.label, ": ", example.frets.join(" "))), React.createElement("button", {
+    className: "chip",
+    onClick: resetEditor
+  }, "\u6E05\u7A7A")), React.createElement("button", {
     className: "primary-button add-current-button",
     onClick: addCurrentInputToChart
   }, "\u52A0\u5165\u66F2\u8C31")), React.createElement("div", {
@@ -1161,6 +1312,9 @@ function App() {
     className: "ghost-button add-button",
     onClick: createChart
   }, "\u65B0\u5EFA"), React.createElement("button", {
+    className: "ghost-button add-button",
+    onClick: createSection
+  }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("button", {
     className: "ghost-button",
     onClick: copyChart
   }, "\u590D\u5236"), React.createElement("button", {
@@ -1175,7 +1329,7 @@ function App() {
   }, "\u5220\u9664\u5F53\u524D"), React.createElement("button", {
     className: "ghost-button danger-button",
     onClick: () => setChartItems([])
-  }, "\u6E05\u7A7A"))), React.createElement("input", {
+  }, "\u6E05\u7A7A\u6BB5\u843D"))), React.createElement("input", {
     ref: importInputRef,
     className: "hidden-file-input",
     type: "file",
@@ -1194,7 +1348,7 @@ function App() {
   }, chartLibrary.charts.map(chart => React.createElement("option", {
     value: chart.id,
     key: chart.id
-  }, chart.title || "未命名曲谱", " (", chart.items.length, ")")))), React.createElement("span", {
+  }, chart.title || "未命名曲谱", " (", flattenSections(chart.sections || []).length, ")")))), React.createElement("span", {
     className: "library-count"
   }, "\u5171 ", chartLibrary.charts.length, " \u4EFD\u66F2\u8C31")), React.createElement("label", {
     className: "chart-title-field"
@@ -1206,35 +1360,169 @@ function App() {
     "aria-label": "\u66F2\u8C31\u540D\u79F0"
   })), React.createElement("p", {
     className: "save-note"
-  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u8981\u957F\u671F\u4FDD\u5B58\u6216\u6362\u8BBE\u5907\uFF0C\u8BF7\u5B9A\u671F\u5BFC\u51FA\u5F53\u524D\u66F2\u8C31\u7684 JSON \u5907\u4EFD\u3002"), chartItems.length ? React.createElement("div", {
-    className: "chart-sequence",
-    "aria-label": "\u66F2\u8C31\u548C\u5F26\u5E8F\u5217"
-  }, chartItems.map((item, index) => React.createElement(ChartItem, {
+  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u8981\u957F\u671F\u4FDD\u5B58\u6216\u6362\u8BBE\u5907\uFF0C\u8BF7\u5B9A\u671F\u5BFC\u51FA\u5F53\u524D\u66F2\u8C31\u7684 JSON \u5907\u4EFD\u3002"), React.createElement("div", {
+    className: "chart-sections",
+    "aria-label": "\u66F2\u8C31\u6BB5\u843D"
+  }, chartSections.map(section => React.createElement(ChartSection, {
+    section: section,
+    active: section.id === activeChart.activeSectionId,
+    key: section.id,
+    onSelect: () => selectSection(section.id),
+    onRename: title => renameSection(section.id, title),
+    onDelete: () => deleteSection(section.id),
+    onDropAt: index => handleChartDrop(section.id, index)
+  }, section.items.map((item, index) => React.createElement(ChartItem, {
     item: item,
     index: index,
-    total: chartItems.length,
+    sectionId: section.id,
     key: item.id,
-    onMove: moveChartItem,
-    onRemove: removeChartItem,
+    onDragStart: () => {
+      selectSection(section.id);
+      setDraggedChord({
+        sectionId: section.id,
+        itemId: item.id
+      });
+    },
+    onDropBefore: () => handleChartDrop(section.id, index),
+    onDuplicate: () => duplicateSectionItem(section.id, item.id),
+    onRemove: () => removeSectionItem(section.id, item.id),
     onUse: frets => useShape(frets)
-  }))) : React.createElement("div", {
-    className: "empty-state"
-  }, "\u4ECE\u4E0A\u65B9\u6309\u6CD5\u5361\u7247\u70B9\u201C\u52A0\u5165\u201D\uFF0C\u6216\u5728\u8BC6\u522B\u533A\u8F93\u5165\u6309\u6CD5\u540E\u70B9\u201C\u52A0\u5165\u66F2\u8C31\u201D\u3002"), chartMessage ? React.createElement("p", {
+  }))))), chartMessage ? React.createElement("p", {
     className: "chart-message"
   }, chartMessage) : null)), React.createElement("p", {
     className: "footer-note"
   }, "MVP \u91C7\u7528\u6807\u51C6\u8C03\u5F26\u548C\u5341\u4E8C\u5E73\u5747\u5F8B\u505A\u8BC6\u522B\u3002\u5B9E\u9645\u97F3\u4E50\u8BED\u5883\u4F1A\u5F71\u54CD\u547D\u540D\uFF0C\u4F8B\u5982\u540C\u4E00\u7EC4\u97F3\u53EF\u80FD\u540C\u65F6\u5BF9\u5E94 Am7 \u4E0E C6\u3002")));
 }
+function ChordInputDiagram({
+  baseFret,
+  values,
+  onBaseFretChange,
+  onStringValueChange
+}) {
+  const parsedValues = values.map(parseFret);
+  const fretRows = Array.from({
+    length: 5
+  }, (_, index) => baseFret + index);
+  const quickPositions = [1, 3, 5, 7, 9, 12];
+  function moveBase(delta) {
+    onBaseFretChange(Math.max(1, Math.min(20, baseFret + delta)));
+  }
+  return React.createElement("div", {
+    className: "fretboard-editor"
+  }, React.createElement("div", {
+    className: "fretboard-toolbar"
+  }, React.createElement("div", null, React.createElement("span", {
+    className: "eyebrow"
+  }, "Chord Input"), React.createElement("h3", null, "\u70B9\u51FB\u548C\u5F26\u56FE\u8F93\u5165\u6309\u6CD5")), React.createElement("div", {
+    className: "position-control",
+    "aria-label": "\u9009\u62E9\u628A\u4F4D"
+  }, React.createElement("button", {
+    className: "ghost-button",
+    onClick: () => moveBase(-1)
+  }, "-"), React.createElement("span", null, baseFret, " \u628A\u4F4D"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: () => moveBase(1)
+  }, "+"))), React.createElement("div", {
+    className: "position-chips"
+  }, quickPositions.map(position => React.createElement("button", {
+    className: position === baseFret ? "chip active-chip" : "chip",
+    key: position,
+    onClick: () => onBaseFretChange(position)
+  }, position))), React.createElement("div", {
+    className: "string-status-grid"
+  }, TUNING.map((string, index) => React.createElement("div", {
+    className: "string-status",
+    key: `status-${string.label}`
+  }, React.createElement("span", null, string.label, " ", string.note), React.createElement("div", null, React.createElement("button", {
+    className: parsedValues[index] === null ? "mini-toggle active-mini" : "mini-toggle",
+    onClick: () => onStringValueChange(index, null),
+    title: "\u8FD9\u6839\u5F26\u4E0D\u5F39"
+  }, "x"), React.createElement("button", {
+    className: parsedValues[index] === 0 ? "mini-toggle active-mini" : "mini-toggle",
+    onClick: () => onStringValueChange(index, 0),
+    title: "\u7A7A\u5F26"
+  }, "0"))))), React.createElement("div", {
+    className: "click-fretboard"
+  }, fretRows.map(fret => React.createElement("div", {
+    className: "fret-row",
+    key: `row-${fret}`
+  }, React.createElement("span", {
+    className: "fret-row-label"
+  }, fret, "fr"), TUNING.map((string, stringIndex) => {
+    const selected = parsedValues[stringIndex] === fret;
+    return React.createElement("button", {
+      className: selected ? "fret-cell selected-fret" : "fret-cell",
+      key: `${string.label}-${fret}`,
+      onClick: () => onStringValueChange(stringIndex, fret),
+      "aria-label": `${string.label} ${string.note} 第 ${fret} 品`
+    }, selected ? fret : "");
+  })))));
+}
+function ChartSection({
+  section,
+  active,
+  children,
+  onSelect,
+  onRename,
+  onDelete,
+  onDropAt
+}) {
+  return React.createElement("section", {
+    className: active ? "chart-section active-section" : "chart-section",
+    onClick: onSelect,
+    onDragOver: event => event.preventDefault(),
+    onDrop: event => {
+      event.preventDefault();
+      onDropAt(section.items.length);
+    }
+  }, React.createElement("div", {
+    className: "chart-section-header"
+  }, React.createElement("label", null, React.createElement("span", null, "\u6BB5\u843D"), React.createElement("input", {
+    className: "section-title-input",
+    value: section.title,
+    onChange: event => onRename(event.target.value),
+    onFocus: onSelect,
+    "aria-label": `${section.title} 段落名称`
+  })), React.createElement("div", {
+    className: "section-meta"
+  }, active ? React.createElement("span", {
+    className: "active-section-pill"
+  }, "\u52A0\u5165\u76EE\u6807") : null, React.createElement("span", null, section.items.length, " \u4E2A\u548C\u5F26"), React.createElement("button", {
+    className: "icon-button danger-button",
+    onClick: event => {
+      event.stopPropagation();
+      onDelete();
+    },
+    title: "\u5220\u9664\u6BB5\u843D"
+  }, "x"))), React.createElement("div", {
+    className: "chart-sequence"
+  }, section.items.length ? children : React.createElement("div", {
+    className: "section-empty"
+  }, "\u628A\u548C\u5F26\u5361\u7247\u62D6\u5230\u8FD9\u91CC\uFF0C\u6216\u9009\u4E2D\u672C\u6BB5\u540E\u70B9\u201C\u52A0\u5165\u201D\u3002")));
+}
 function ChartItem({
   item,
   index,
-  total,
-  onMove,
+  sectionId,
+  onDragStart,
+  onDropBefore,
+  onDuplicate,
   onRemove,
   onUse
 }) {
   return React.createElement("article", {
-    className: "chart-card"
+    className: "chart-card",
+    draggable: "true",
+    onDragStart: event => {
+      event.dataTransfer.effectAllowed = "move";
+      onDragStart();
+    },
+    onDragOver: event => event.preventDefault(),
+    onDrop: event => {
+      event.preventDefault();
+      event.stopPropagation();
+      onDropBefore();
+    }
   }, React.createElement("div", {
     className: "chart-card-main"
   }, React.createElement("span", {
@@ -1251,20 +1539,18 @@ function ChartItem({
   }, item.shape), " \xB7 ", item.position), React.createElement("p", null, item.source)))), React.createElement("div", {
     className: "chart-card-actions"
   }, React.createElement("button", {
-    className: "ghost-button",
-    disabled: index === 0,
-    onClick: () => onMove(item.id, -1)
-  }, "\u4E0A\u79FB"), React.createElement("button", {
-    className: "ghost-button",
-    disabled: index === total - 1,
-    onClick: () => onMove(item.id, 1)
-  }, "\u4E0B\u79FB"), React.createElement("button", {
-    className: "ghost-button",
-    onClick: () => onUse(item.frets)
+    className: "icon-button",
+    onClick: () => onUse(item.frets),
+    title: "\u5E26\u5165\u8BC6\u522B"
   }, "\u8BC6\u522B"), React.createElement("button", {
-    className: "ghost-button danger-button",
-    onClick: () => onRemove(item.id)
-  }, "\u5220\u9664")));
+    className: "icon-button",
+    onClick: onDuplicate,
+    title: "\u590D\u5236\u8FD9\u4E2A\u548C\u5F26"
+  }, "\u590D\u5236"), React.createElement("button", {
+    className: "icon-button danger-button",
+    onClick: onRemove,
+    title: "\u5220\u9664"
+  }, "x")));
 }
 function VoicingCard({
   parsed,
