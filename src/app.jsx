@@ -647,6 +647,7 @@ function createId(prefix = "id") {
 }
 
 function normalizeChartItem(item = {}) {
+  item = item && typeof item === "object" ? item : {};
   const frets = Array.isArray(item.frets)
     ? item.frets
         .map((fret) => {
@@ -673,6 +674,8 @@ function normalizeChartItem(item = {}) {
 }
 
 function normalizeChartSection(section = {}, index = 0) {
+  section = section && typeof section === "object" ? section : {};
+
   return {
     id: section.id || createId("section"),
     title: section.title || (index === 0 ? DEFAULT_SECTION_TITLE : `段落 ${index + 1}`),
@@ -685,6 +688,7 @@ function createEmptySection(title = DEFAULT_SECTION_TITLE) {
 }
 
 function normalizeChart(chart = {}, fallbackTitle = "未命名曲谱") {
+  chart = chart && typeof chart === "object" ? chart : {};
   const sections = Array.isArray(chart.sections)
     ? chart.sections.map(normalizeChartSection)
     : [normalizeChartSection({ title: DEFAULT_SECTION_TITLE, items: chart.items || [] })];
@@ -782,15 +786,31 @@ function hasSupabaseConfig(config) {
 }
 
 function createSupabaseClient(config) {
-  if (!hasSupabaseConfig(config) || !window.supabase?.createClient) return null;
+  if (!hasSupabaseConfig(config)) return { client: null, error: "" };
+  if (!window.supabase?.createClient) {
+    return { client: null, error: "Supabase 脚本未加载，暂时只能本地保存。" };
+  }
 
-  return window.supabase.createClient(config.url, config.anonKey, {
-    auth: {
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      persistSession: true,
-    },
-  });
+  try {
+    const url = new URL(config.url);
+
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return { client: null, error: "Supabase URL 需要以 https:// 开头。" };
+    }
+
+    return {
+      client: window.supabase.createClient(config.url, config.anonKey, {
+        auth: {
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          persistSession: true,
+        },
+      }),
+      error: "",
+    };
+  } catch (error) {
+    return { client: null, error: `Supabase 配置无效：${error.message}` };
+  }
 }
 
 function cloudRedirectUrl() {
@@ -902,13 +922,14 @@ function App() {
       return undefined;
     }
 
-    const client = createSupabaseClient(supabaseConfig);
+    const { client, error: clientError } = createSupabaseClient(supabaseConfig);
 
     if (!client) {
       setSyncClient(null);
       setSyncUser(null);
       setCloudReady(false);
-      setSyncStatus({ tone: "error", text: "Supabase 脚本未加载，暂时只能本地保存。" });
+      setShowSyncSettings(Boolean(clientError));
+      setSyncStatus({ tone: clientError ? "error" : "local", text: clientError || "未配置云同步，当前仅保存到本机。" });
       return undefined;
     }
 
@@ -1383,6 +1404,17 @@ function App() {
 
   function saveSyncSettings() {
     const normalized = saveSupabaseConfig(syncConfigDraft);
+    const { error: clientError } = createSupabaseClient(normalized);
+
+    if (clientError) {
+      setSyncConfigDraft(normalized);
+      setSupabaseConfig(normalized);
+      setShowSyncSettings(true);
+      setCloudReady(false);
+      setSyncStatus({ tone: "error", text: clientError });
+      return;
+    }
+
     setSupabaseConfig(normalized);
     setShowSyncSettings(false);
     setCloudReady(false);
