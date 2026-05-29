@@ -63,7 +63,19 @@ http://127.0.0.1:4175/
 http://localhost:4173/
 ```
 
-## 4. 配置 GitHub Secrets
+## 4. 确认邮箱密码登录
+
+在 Supabase Dashboard 打开 `Authentication -> Providers -> Email`，确认 Email provider 已开启。
+
+网站现在支持：
+
+- 邮箱 + 密码注册
+- 邮箱 + 密码登录
+- 邮箱 magic link 备用登录
+
+如果 Supabase 要求确认邮箱，新账号第一次注册后需要打开邮件确认一次；之后就可以直接用邮箱和密码登录。
+
+## 5. 配置 GitHub Secrets
 
 在 GitHub 仓库打开 `Settings -> Secrets and variables -> Actions -> New repository secret`，添加：
 
@@ -80,8 +92,8 @@ SUPABASE_PUBLISHABLE_KEY
 
 保存后推送代码，GitHub Pages workflow 会在构建时把配置写进静态页面。
 
-## 5. 使用方式
+## 6. 使用方式
 
-打开网站后，在曲谱记录里的云同步区域输入邮箱，点击登录。邮件登录完成后，曲谱会在同一账号的设备间自动合并并保存。
+打开网站后，在曲谱记录里的云同步区域输入邮箱和密码，点击登录或注册。登录完成后，曲谱会在同一账号的设备间自动合并并保存。
 
 没有登录时，曲谱仍会保存到当前浏览器的 localStorage。

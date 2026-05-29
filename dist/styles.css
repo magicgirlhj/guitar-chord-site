@@ -871,9 +871,33 @@ h2 {
   align-items: center;
 }
 
-.sync-email {
+.sync-auth-panel {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 620px);
+}
+
+.sync-login-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr);
+  gap: 8px;
+}
+
+.sync-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sync-email,
+.sync-password {
   width: min(100%, 280px);
   min-height: 38px;
+}
+
+.sync-login-fields .sync-email,
+.sync-login-fields .sync-password {
+  width: 100%;
 }
 
 .sync-settings {
@@ -1259,6 +1283,10 @@ h2 {
   }
 
   .sync-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-login-fields {
     grid-template-columns: 1fr;
   }
 

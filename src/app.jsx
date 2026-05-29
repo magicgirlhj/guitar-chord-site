@@ -893,6 +893,7 @@ function App() {
   const [syncClient, setSyncClient] = useState(null);
   const [syncUser, setSyncUser] = useState(null);
   const [syncEmail, setSyncEmail] = useState("");
+  const [syncPassword, setSyncPassword] = useState("");
   const [syncStatus, setSyncStatus] = useState({
     tone: "local",
     text: "本地保存",
@@ -1438,23 +1439,86 @@ function App() {
     setSyncStatus({ tone: "local", text: "已清除云同步配置，当前仅保存到本机。" });
   }
 
-  async function sendLoginLink() {
+  function getSyncCredentials(requirePassword = true) {
     const email = syncEmail.trim();
+    const password = syncPassword;
 
     if (!syncClient) {
       setSyncStatus({ tone: "error", text: "请先保存 Supabase 配置。" });
-      return;
+      return null;
     }
 
     if (!email) {
       setSyncStatus({ tone: "error", text: "请输入邮箱。" });
+      return null;
+    }
+
+    if (requirePassword && password.length < 6) {
+      setSyncStatus({ tone: "error", text: "密码至少需要 6 位。" });
+      return null;
+    }
+
+    return { email, password };
+  }
+
+  async function signInWithPassword() {
+    const credentials = getSyncCredentials();
+
+    if (!credentials) return;
+
+    setSyncStatus({ tone: "pending", text: "正在登录..." });
+
+    const { error } = await syncClient.auth.signInWithPassword({
+      email: credentials.email,
+      password: credentials.password,
+    });
+
+    if (error) {
+      setSyncStatus({ tone: "error", text: `密码登录失败：${error.message}` });
       return;
     }
+
+    setSyncPassword("");
+    setSyncStatus({ tone: "pending", text: "登录成功，正在读取云端曲谱..." });
+  }
+
+  async function signUpWithPassword() {
+    const credentials = getSyncCredentials();
+
+    if (!credentials) return;
+
+    setSyncStatus({ tone: "pending", text: "正在注册..." });
+
+    const { data, error } = await syncClient.auth.signUp({
+      email: credentials.email,
+      password: credentials.password,
+      options: {
+        emailRedirectTo: cloudRedirectUrl(),
+      },
+    });
+
+    if (error) {
+      setSyncStatus({ tone: "error", text: `注册失败：${error.message}` });
+      return;
+    }
+
+    setSyncPassword("");
+    setSyncStatus(
+      data.session
+        ? { tone: "pending", text: "注册成功，正在同步曲谱..." }
+        : { tone: "pending", text: "注册成功，请先打开邮箱确认一次，然后回来用密码登录。" }
+    );
+  }
+
+  async function sendLoginLink() {
+    const credentials = getSyncCredentials(false);
+
+    if (!credentials) return;
 
     setSyncStatus({ tone: "pending", text: "正在发送登录链接..." });
 
     const { error } = await syncClient.auth.signInWithOtp({
-      email,
+      email: credentials.email,
       options: {
         emailRedirectTo: cloudRedirectUrl(),
       },
@@ -1710,19 +1774,40 @@ function App() {
 
               <div className="sync-controls">
                 {syncConfigured && !syncUser ? (
-                  <>
-                    <input
-                      className="text-field sync-email"
-                      type="email"
-                      value={syncEmail}
-                      onChange={(event) => setSyncEmail(event.target.value)}
-                      placeholder="邮箱"
-                      aria-label="云同步登录邮箱"
-                    />
-                    <button className="ghost-button add-button" onClick={sendLoginLink}>
-                      登录
-                    </button>
-                  </>
+                  <div className="sync-auth-panel">
+                    <div className="sync-login-fields">
+                      <input
+                        className="text-field sync-email"
+                        type="email"
+                        value={syncEmail}
+                        onChange={(event) => setSyncEmail(event.target.value)}
+                        placeholder="邮箱"
+                        aria-label="云同步登录邮箱"
+                      />
+                      <input
+                        className="text-field sync-password"
+                        type="password"
+                        value={syncPassword}
+                        onChange={(event) => setSyncPassword(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") signInWithPassword();
+                        }}
+                        placeholder="密码"
+                        aria-label="云同步登录密码"
+                      />
+                    </div>
+                    <div className="sync-auth-actions">
+                      <button className="ghost-button add-button" onClick={signInWithPassword}>
+                        密码登录
+                      </button>
+                      <button className="ghost-button" onClick={signUpWithPassword}>
+                        注册
+                      </button>
+                      <button className="ghost-button" onClick={sendLoginLink}>
+                        邮箱链接
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
 
                 {syncUser ? (

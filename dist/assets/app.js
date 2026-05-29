@@ -932,6 +932,7 @@ function App() {
   const [syncClient, setSyncClient] = useState(null);
   const [syncUser, setSyncUser] = useState(null);
   const [syncEmail, setSyncEmail] = useState("");
+  const [syncPassword, setSyncPassword] = useState("");
   const [syncStatus, setSyncStatus] = useState({
     tone: "local",
     text: "本地保存"
@@ -1462,22 +1463,97 @@ function App() {
       text: "已清除云同步配置，当前仅保存到本机。"
     });
   }
-  async function sendLoginLink() {
+  function getSyncCredentials(requirePassword = true) {
     const email = syncEmail.trim();
+    const password = syncPassword;
     if (!syncClient) {
       setSyncStatus({
         tone: "error",
         text: "请先保存 Supabase 配置。"
       });
-      return;
+      return null;
     }
     if (!email) {
       setSyncStatus({
         tone: "error",
         text: "请输入邮箱。"
       });
+      return null;
+    }
+    if (requirePassword && password.length < 6) {
+      setSyncStatus({
+        tone: "error",
+        text: "密码至少需要 6 位。"
+      });
+      return null;
+    }
+    return {
+      email,
+      password
+    };
+  }
+  async function signInWithPassword() {
+    const credentials = getSyncCredentials();
+    if (!credentials) return;
+    setSyncStatus({
+      tone: "pending",
+      text: "正在登录..."
+    });
+    const {
+      error
+    } = await syncClient.auth.signInWithPassword({
+      email: credentials.email,
+      password: credentials.password
+    });
+    if (error) {
+      setSyncStatus({
+        tone: "error",
+        text: `密码登录失败：${error.message}`
+      });
       return;
     }
+    setSyncPassword("");
+    setSyncStatus({
+      tone: "pending",
+      text: "登录成功，正在读取云端曲谱..."
+    });
+  }
+  async function signUpWithPassword() {
+    const credentials = getSyncCredentials();
+    if (!credentials) return;
+    setSyncStatus({
+      tone: "pending",
+      text: "正在注册..."
+    });
+    const {
+      data,
+      error
+    } = await syncClient.auth.signUp({
+      email: credentials.email,
+      password: credentials.password,
+      options: {
+        emailRedirectTo: cloudRedirectUrl()
+      }
+    });
+    if (error) {
+      setSyncStatus({
+        tone: "error",
+        text: `注册失败：${error.message}`
+      });
+      return;
+    }
+    setSyncPassword("");
+    setSyncStatus(data.session ? {
+      tone: "pending",
+      text: "注册成功，正在同步曲谱..."
+    } : {
+      tone: "pending",
+      text: "注册成功，请先打开邮箱确认一次，然后回来用密码登录。"
+    });
+  }
+  async function sendLoginLink() {
+    const credentials = getSyncCredentials(false);
+    if (!credentials) return;
     setSyncStatus({
       tone: "pending",
       text: "正在发送登录链接..."
@@ -1485,7 +1561,7 @@ function App() {
     const {
       error
     } = await syncClient.auth.signInWithOtp({
-      email,
+      email: credentials.email,
       options: {
         emailRedirectTo: cloudRedirectUrl()
       }
@@ -1707,17 +1783,39 @@ function App() {
     "aria-hidden": "true"
   }), React.createElement("div", null, React.createElement("strong", null, syncUser ? syncUser.email || "已登录" : "云同步"), React.createElement("p", null, syncStatus.text))), React.createElement("div", {
     className: "sync-controls"
-  }, syncConfigured && !syncUser ? React.createElement(React.Fragment, null, React.createElement("input", {
+  }, syncConfigured && !syncUser ? React.createElement("div", {
+    className: "sync-auth-panel"
+  }, React.createElement("div", {
+    className: "sync-login-fields"
+  }, React.createElement("input", {
     className: "text-field sync-email",
     type: "email",
     value: syncEmail,
     onChange: event => setSyncEmail(event.target.value),
     placeholder: "\u90AE\u7BB1",
     "aria-label": "\u4E91\u540C\u6B65\u767B\u5F55\u90AE\u7BB1"
-  }), React.createElement("button", {
+  }), React.createElement("input", {
+    className: "text-field sync-password",
+    type: "password",
+    value: syncPassword,
+    onChange: event => setSyncPassword(event.target.value),
+    onKeyDown: event => {
+      if (event.key === "Enter") signInWithPassword();
+    },
+    placeholder: "\u5BC6\u7801",
+    "aria-label": "\u4E91\u540C\u6B65\u767B\u5F55\u5BC6\u7801"
+  })), React.createElement("div", {
+    className: "sync-auth-actions"
+  }, React.createElement("button", {
     className: "ghost-button add-button",
+    onClick: signInWithPassword
+  }, "\u5BC6\u7801\u767B\u5F55"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: signUpWithPassword
+  }, "\u6CE8\u518C"), React.createElement("button", {
+    className: "ghost-button",
     onClick: sendLoginLink
-  }, "\u767B\u5F55")) : null, syncUser ? React.createElement("button", {
+  }, "\u90AE\u7BB1\u94FE\u63A5"))) : null, syncUser ? React.createElement("button", {
     className: "ghost-button",
     onClick: signOutSync
   }, "\u9000\u51FA") : null, React.createElement("button", {
