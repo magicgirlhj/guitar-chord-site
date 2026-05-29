@@ -757,6 +757,10 @@ function embeddedSupabaseConfig() {
 }
 
 function loadSupabaseConfig() {
+  const embeddedConfig = embeddedSupabaseConfig();
+
+  if (hasSupabaseConfig(embeddedConfig)) return embeddedConfig;
+
   try {
     const stored = window.localStorage.getItem(SUPABASE_CONFIG_STORAGE_KEY);
     const localConfig = stored ? normalizeSupabaseConfig(JSON.parse(stored)) : null;
@@ -766,7 +770,7 @@ function loadSupabaseConfig() {
     // Fall back to the build-time config below.
   }
 
-  return embeddedSupabaseConfig();
+  return embeddedConfig;
 }
 
 function saveSupabaseConfig(config) {

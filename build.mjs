@@ -8,9 +8,13 @@ const filesToCopy = [
   ["vendor/react.production.min.js", "vendor/react.production.min.js"],
   ["vendor/react-dom.production.min.js", "vendor/react-dom.production.min.js"],
 ];
+const defaultSupabaseConfig = {
+  url: "https://udjiouqpkgktgivyjfjp.supabase.co",
+  anonKey: "sb_publishable_S9KVGNn4_5ZklTVK7K4fXQ_8Gvj_pkK",
+};
 const supabaseConfig = {
-  url: process.env.SUPABASE_URL || "",
-  anonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "",
+  url: process.env.SUPABASE_URL || defaultSupabaseConfig.url,
+  anonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || defaultSupabaseConfig.anonKey,
 };
 
 async function write(target, content) {

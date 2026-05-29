@@ -825,12 +825,14 @@ function embeddedSupabaseConfig() {
   return normalizeSupabaseConfig(window.GUITAR_CHORD_SUPABASE || {});
 }
 function loadSupabaseConfig() {
+  const embeddedConfig = embeddedSupabaseConfig();
+  if (hasSupabaseConfig(embeddedConfig)) return embeddedConfig;
   try {
     const stored = window.localStorage.getItem(SUPABASE_CONFIG_STORAGE_KEY);
     const localConfig = stored ? normalizeSupabaseConfig(JSON.parse(stored)) : null;
     if (localConfig?.url && localConfig?.anonKey) return localConfig;
   } catch {}
-  return embeddedSupabaseConfig();
+  return embeddedConfig;
 }
 function saveSupabaseConfig(config) {
   const normalized = normalizeSupabaseConfig(config);
