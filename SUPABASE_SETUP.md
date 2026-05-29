@@ -71,9 +71,12 @@ http://localhost:4173/
 
 - 邮箱 + 密码注册
 - 邮箱 + 密码登录
+- 重发注册确认邮件
 - 邮箱 magic link 备用登录
 
 如果 Supabase 要求确认邮箱，新账号第一次注册后需要打开邮件确认一次；之后就可以直接用邮箱和密码登录。
+
+如果你自己使用这个网站，也可以在 Email provider 里关闭 Confirm email，让注册后直接登录；公开给别人使用时建议保留邮箱确认。
 
 ## 5. 配置 GitHub Secrets
 

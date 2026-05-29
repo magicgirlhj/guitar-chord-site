@@ -1474,7 +1474,14 @@ function App() {
     });
 
     if (error) {
-      setSyncStatus({ tone: "error", text: `密码登录失败：${error.message}` });
+      const invalidLogin = error.message.toLowerCase().includes("invalid login credentials");
+
+      setSyncStatus({
+        tone: "error",
+        text: invalidLogin
+          ? "密码登录失败：邮箱未确认、密码不对，或这个邮箱还没有注册。没收到确认邮件可以点“重发确认”。"
+          : `密码登录失败：${error.message}`,
+      });
       return;
     }
 
@@ -1507,6 +1514,28 @@ function App() {
       data.session
         ? { tone: "pending", text: "注册成功，正在同步曲谱..." }
         : { tone: "pending", text: "注册成功，请先打开邮箱确认一次，然后回来用密码登录。" }
+    );
+  }
+
+  async function resendSignupConfirmation() {
+    const credentials = getSyncCredentials(false);
+
+    if (!credentials) return;
+
+    setSyncStatus({ tone: "pending", text: "正在重发确认邮件..." });
+
+    const { error } = await syncClient.auth.resend({
+      type: "signup",
+      email: credentials.email,
+      options: {
+        emailRedirectTo: cloudRedirectUrl(),
+      },
+    });
+
+    setSyncStatus(
+      error
+        ? { tone: "error", text: `确认邮件重发失败：${error.message}` }
+        : { tone: "pending", text: "确认邮件已重发，请检查收件箱、垃圾邮件和促销邮件。" }
     );
   }
 
@@ -1802,6 +1831,9 @@ function App() {
                       </button>
                       <button className="ghost-button" onClick={signUpWithPassword}>
                         注册
+                      </button>
+                      <button className="ghost-button" onClick={resendSignupConfirmation}>
+                        重发确认
                       </button>
                       <button className="ghost-button" onClick={sendLoginLink}>
                         邮箱链接
