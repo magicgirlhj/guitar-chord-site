@@ -894,6 +894,7 @@ function App() {
   const [syncUser, setSyncUser] = useState(null);
   const [syncEmail, setSyncEmail] = useState("");
   const [syncPassword, setSyncPassword] = useState("");
+  const [syncNewPassword, setSyncNewPassword] = useState("");
   const [syncStatus, setSyncStatus] = useState({
     tone: "local",
     text: "本地保存",
@@ -1479,7 +1480,7 @@ function App() {
       setSyncStatus({
         tone: "error",
         text: invalidLogin
-          ? "密码登录失败：邮箱未确认、密码不对，或这个邮箱还没有注册。没收到确认邮件可以点“重发确认”。"
+          ? "密码登录失败：这个邮箱可能还没设置密码。请先用“邮箱链接”登录一次，然后在这里设置密码。"
           : `密码登录失败：${error.message}`,
       });
       return;
@@ -1513,7 +1514,7 @@ function App() {
     setSyncStatus(
       data.session
         ? { tone: "pending", text: "注册成功，正在同步曲谱..." }
-        : { tone: "pending", text: "注册成功，请先打开邮箱确认一次，然后回来用密码登录。" }
+        : { tone: "pending", text: "注册成功，请先打开邮箱确认一次；如果收不到邮件，可以用“邮箱链接”登录后设置密码。" }
     );
   }
 
@@ -1558,6 +1559,32 @@ function App() {
         ? { tone: "error", text: `登录链接发送失败：${error.message}` }
         : { tone: "pending", text: "登录链接已发送，请打开邮箱完成登录。" }
     );
+  }
+
+  async function updateSyncPassword() {
+    if (!syncClient || !syncUser) {
+      setSyncStatus({ tone: "error", text: "请先登录后再设置密码。" });
+      return;
+    }
+
+    if (syncNewPassword.length < 6) {
+      setSyncStatus({ tone: "error", text: "新密码至少需要 6 位。" });
+      return;
+    }
+
+    setSyncStatus({ tone: "pending", text: "正在设置密码..." });
+
+    const { error } = await syncClient.auth.updateUser({
+      password: syncNewPassword,
+    });
+
+    if (error) {
+      setSyncStatus({ tone: "error", text: `密码设置失败：${error.message}` });
+      return;
+    }
+
+    setSyncNewPassword("");
+    setSyncStatus({ tone: "synced", text: "密码已设置，以后可以直接用邮箱和密码登录。" });
   }
 
   async function signOutSync() {
@@ -1843,9 +1870,29 @@ function App() {
                 ) : null}
 
                 {syncUser ? (
-                  <button className="ghost-button" onClick={signOutSync}>
-                    退出
-                  </button>
+                  <div className="sync-auth-panel sync-password-panel">
+                    <div className="sync-login-fields">
+                      <input
+                        className="text-field sync-password"
+                        type="password"
+                        value={syncNewPassword}
+                        onChange={(event) => setSyncNewPassword(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") updateSyncPassword();
+                        }}
+                        placeholder="新密码（至少 6 位）"
+                        aria-label="设置云同步密码"
+                      />
+                    </div>
+                    <div className="sync-auth-actions">
+                      <button className="ghost-button add-button" onClick={updateSyncPassword}>
+                        设置密码
+                      </button>
+                      <button className="ghost-button" onClick={signOutSync}>
+                        退出
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
 
                 <button

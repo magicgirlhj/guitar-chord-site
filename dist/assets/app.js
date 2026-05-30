@@ -933,6 +933,7 @@ function App() {
   const [syncUser, setSyncUser] = useState(null);
   const [syncEmail, setSyncEmail] = useState("");
   const [syncPassword, setSyncPassword] = useState("");
+  const [syncNewPassword, setSyncNewPassword] = useState("");
   const [syncStatus, setSyncStatus] = useState({
     tone: "local",
     text: "本地保存"
@@ -1509,7 +1510,7 @@ function App() {
       const invalidLogin = error.message.toLowerCase().includes("invalid login credentials");
       setSyncStatus({
         tone: "error",
-        text: invalidLogin ? "密码登录失败：邮箱未确认、密码不对，或这个邮箱还没有注册。没收到确认邮件可以点“重发确认”。" : `密码登录失败：${error.message}`
+        text: invalidLogin ? "密码登录失败：这个邮箱可能还没设置密码。请先用“邮箱链接”登录一次，然后在这里设置密码。" : `密码登录失败：${error.message}`
       });
       return;
     }
@@ -1549,7 +1550,7 @@ function App() {
       text: "注册成功，正在同步曲谱..."
     } : {
       tone: "pending",
-      text: "注册成功，请先打开邮箱确认一次，然后回来用密码登录。"
+      text: "注册成功，请先打开邮箱确认一次；如果收不到邮件，可以用“邮箱链接”登录后设置密码。"
     });
   }
   async function resendSignupConfirmation() {
@@ -1597,6 +1598,43 @@ function App() {
     } : {
       tone: "pending",
       text: "登录链接已发送，请打开邮箱完成登录。"
+    });
+  }
+  async function updateSyncPassword() {
+    if (!syncClient || !syncUser) {
+      setSyncStatus({
+        tone: "error",
+        text: "请先登录后再设置密码。"
+      });
+      return;
+    }
+    if (syncNewPassword.length < 6) {
+      setSyncStatus({
+        tone: "error",
+        text: "新密码至少需要 6 位。"
+      });
+      return;
+    }
+    setSyncStatus({
+      tone: "pending",
+      text: "正在设置密码..."
+    });
+    const {
+      error
+    } = await syncClient.auth.updateUser({
+      password: syncNewPassword
+    });
+    if (error) {
+      setSyncStatus({
+        tone: "error",
+        text: `密码设置失败：${error.message}`
+      });
+      return;
+    }
+    setSyncNewPassword("");
+    setSyncStatus({
+      tone: "synced",
+      text: "密码已设置，以后可以直接用邮箱和密码登录。"
     });
   }
   async function signOutSync() {
@@ -1843,10 +1881,29 @@ function App() {
   }, "\u91CD\u53D1\u786E\u8BA4"), React.createElement("button", {
     className: "ghost-button",
     onClick: sendLoginLink
-  }, "\u90AE\u7BB1\u94FE\u63A5"))) : null, syncUser ? React.createElement("button", {
+  }, "\u90AE\u7BB1\u94FE\u63A5"))) : null, syncUser ? React.createElement("div", {
+    className: "sync-auth-panel sync-password-panel"
+  }, React.createElement("div", {
+    className: "sync-login-fields"
+  }, React.createElement("input", {
+    className: "text-field sync-password",
+    type: "password",
+    value: syncNewPassword,
+    onChange: event => setSyncNewPassword(event.target.value),
+    onKeyDown: event => {
+      if (event.key === "Enter") updateSyncPassword();
+    },
+    placeholder: "\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 6 \u4F4D\uFF09",
+    "aria-label": "\u8BBE\u7F6E\u4E91\u540C\u6B65\u5BC6\u7801"
+  })), React.createElement("div", {
+    className: "sync-auth-actions"
+  }, React.createElement("button", {
+    className: "ghost-button add-button",
+    onClick: updateSyncPassword
+  }, "\u8BBE\u7F6E\u5BC6\u7801"), React.createElement("button", {
     className: "ghost-button",
     onClick: signOutSync
-  }, "\u9000\u51FA") : null, React.createElement("button", {
+  }, "\u9000\u51FA"))) : null, React.createElement("button", {
     className: "ghost-button",
     onClick: () => {
       setSyncConfigDraft(supabaseConfig);

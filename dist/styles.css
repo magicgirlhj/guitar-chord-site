@@ -883,6 +883,10 @@ h2 {
   gap: 8px;
 }
 
+.sync-password-panel .sync-login-fields {
+  grid-template-columns: minmax(180px, 280px);
+}
+
 .sync-auth-actions {
   display: flex;
   flex-wrap: wrap;
