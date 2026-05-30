@@ -883,7 +883,7 @@ h2 {
   gap: 8px;
 }
 
-.sync-password-panel .sync-login-fields {
+.sync-account-panel .sync-login-fields {
   grid-template-columns: minmax(180px, 280px);
 }
 
@@ -902,6 +902,21 @@ h2 {
 .sync-login-fields .sync-email,
 .sync-login-fields .sync-password {
   width: 100%;
+}
+
+.sync-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sync-account-email {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-right: 2px;
 }
 
 .sync-settings {
