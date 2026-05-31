@@ -1046,7 +1046,6 @@ function App() {
   const [chordEditor, setChordEditor] = useState(createChordEditorState);
   const [openBatchSectionId, setOpenBatchSectionId] = useState("");
   const [batchInput, setBatchInput] = useState("");
-  const [bulkMode, setBulkMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [bulkTargetSectionId, setBulkTargetSectionId] = useState("");
   const [draggedChord, setDraggedChord] = useState(null);
@@ -2136,9 +2135,6 @@ function App() {
     onClick: createSection
   }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("button", {
     className: "ghost-button",
-    onClick: () => setBulkMode(mode => !mode)
-  }, bulkMode ? "退出批量" : "批量编辑"), React.createElement("button", {
-    className: "ghost-button",
     onClick: copyChart
   }, "\u590D\u5236\u6574\u9996"), React.createElement("button", {
     className: "ghost-button",
@@ -2287,14 +2283,7 @@ function App() {
     "aria-label": "\u66F2\u8C31\u540D\u79F0"
   })), React.createElement("p", {
     className: "save-note"
-  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), React.createElement("div", {
-    className: "songbook-command-row"
-  }, React.createElement("button", {
-    className: "primary-button add-chord-button",
-    onClick: () => openNewChordEditor(activeSection.id)
-  }, "+ \u6DFB\u52A0\u548C\u5F26\u6309\u6CD5"), React.createElement("span", {
-    className: "hint"
-  }, "\u5F53\u524D\u52A0\u5165\u76EE\u6807\uFF1A", activeSection.title)), bulkMode ? React.createElement("div", {
+  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), selectedItemIds.length ? React.createElement("div", {
     className: "bulk-toolbar"
   }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
     className: "ghost-button",
@@ -2316,33 +2305,7 @@ function App() {
   }, "\u79FB\u52A8\u5230\u6BB5\u843D"), React.createElement("button", {
     className: "ghost-button",
     onClick: () => transferSelectedItems(true)
-  }, "\u590D\u5236\u5230\u6BB5\u843D")) : null, chordEditor.open ? React.createElement(ChordEditorPanel, {
-    editor: chordEditor,
-    recognition: chordEditorRecognition,
-    candidateNames: chordEditorNames,
-    selectedName: chordEditorSelectedName,
-    onBaseFretChange: baseFret => setChordEditor(editor => ({
-      ...editor,
-      baseFret
-    })),
-    onStringValueChange: setChordEditorStringValue,
-    onSelectName: name => setChordEditor(editor => ({
-      ...editor,
-      selectedName: name,
-      customName: name === CUSTOM_CHORD_NAME ? editor.customName : ""
-    })),
-    onCustomNameChange: customName => setChordEditor(editor => ({
-      ...editor,
-      customName,
-      selectedName: CUSTOM_CHORD_NAME
-    })),
-    onNoteChange: note => setChordEditor(editor => ({
-      ...editor,
-      note
-    })),
-    onSave: saveChordEditorItem,
-    onCancel: closeChordEditor
-  }) : null, React.createElement("div", {
+  }, "\u590D\u5236\u5230\u6BB5\u843D")) : null, React.createElement("div", {
     className: "chart-sections",
     "aria-label": "\u66F2\u8C31\u6BB5\u843D"
   }, chartSections.map(section => React.createElement(ChartSection, {
@@ -2365,6 +2328,34 @@ function App() {
     },
     onBatchInputChange: setBatchInput,
     onBatchSubmit: () => parseBatchIntoSection(section.id),
+    editorSlot: chordEditor.open && chordEditor.sectionId === section.id ? React.createElement(ChordEditorPanel, {
+      compact: true,
+      editor: chordEditor,
+      recognition: chordEditorRecognition,
+      candidateNames: chordEditorNames,
+      selectedName: chordEditorSelectedName,
+      onBaseFretChange: baseFret => setChordEditor(editor => ({
+        ...editor,
+        baseFret
+      })),
+      onStringValueChange: setChordEditorStringValue,
+      onSelectName: name => setChordEditor(editor => ({
+        ...editor,
+        selectedName: name,
+        customName: name === CUSTOM_CHORD_NAME ? editor.customName : ""
+      })),
+      onCustomNameChange: customName => setChordEditor(editor => ({
+        ...editor,
+        customName,
+        selectedName: CUSTOM_CHORD_NAME
+      })),
+      onNoteChange: note => setChordEditor(editor => ({
+        ...editor,
+        note
+      })),
+      onSave: saveChordEditorItem,
+      onCancel: closeChordEditor
+    }) : null,
     onDropAt: index => handleChartDrop(section.id, index),
     onDragOverAtEnd: () => markChartDropTarget(section.id, section.items.length),
     isDragging: Boolean(draggedChord),
@@ -2372,7 +2363,6 @@ function App() {
   }, section.items.map((item, index) => React.createElement(ChartItem, {
     item: item,
     key: item.id,
-    bulkMode: bulkMode,
     selected: selectedItemIds.includes(item.id),
     onSelect: () => toggleSelectedItem(item.id),
     isDragging: draggedChord?.itemId === item.id,
@@ -2390,8 +2380,7 @@ function App() {
     onDropBefore: () => handleChartDrop(section.id, index),
     onDuplicate: () => duplicateSectionItem(section.id, item.id),
     onRemove: () => removeSectionItem(section.id, item.id),
-    onEdit: () => openEditChordEditor(section.id, item),
-    onUse: frets => useShape(frets)
+    onEdit: () => openEditChordEditor(section.id, item)
   }))))), chartMessage ? React.createElement("p", {
     className: "chart-message"
   }, chartMessage) : null)), React.createElement("p", {
@@ -2399,6 +2388,7 @@ function App() {
   }, "MVP \u91C7\u7528\u6807\u51C6\u8C03\u5F26\u548C\u5341\u4E8C\u5E73\u5747\u5F8B\u505A\u8BC6\u522B\u3002\u5B9E\u9645\u97F3\u4E50\u8BED\u5883\u4F1A\u5F71\u54CD\u547D\u540D\uFF0C\u4F8B\u5982\u540C\u4E00\u7EC4\u97F3\u53EF\u80FD\u540C\u65F6\u5BF9\u5E94 Am7 \u4E0E C6\u3002")));
 }
 function ChordEditorPanel({
+  compact = false,
   editor,
   recognition,
   candidateNames,
@@ -2412,7 +2402,7 @@ function ChordEditorPanel({
   onCancel
 }) {
   return React.createElement("section", {
-    className: "chord-editor-panel"
+    className: compact ? "chord-editor-panel section-chord-editor-panel" : "chord-editor-panel"
   }, React.createElement("div", {
     className: "panel-header compact-header"
   }, React.createElement("div", {
@@ -2424,6 +2414,7 @@ function ChordEditorPanel({
   }, "\u53EF\u4EE5\u4FDD\u5B58\u65E0\u6CD5\u8BC6\u522B\u7684\u6309\u6CD5\uFF0C\u4E5F\u53EF\u4EE5\u4F7F\u7528\u81EA\u5B9A\u4E49\u540D\u79F0\u3002")), React.createElement("div", {
     className: "chord-editor-layout"
   }, React.createElement(ChordInputDiagram, {
+    compact: compact,
     baseFret: editor.baseFret,
     values: editor.frets,
     onBaseFretChange: onBaseFretChange,
@@ -2479,7 +2470,8 @@ function ChordInputDiagram({
   baseFret,
   values,
   onBaseFretChange,
-  onStringValueChange
+  onStringValueChange,
+  compact = false
 }) {
   const parsedValues = values.map(parseFret);
   const fretRows = Array.from({
@@ -2504,7 +2496,7 @@ function ChordInputDiagram({
     onStringValueChange(index, parsedValues[index] === null ? 0 : null);
   }
   return React.createElement("div", {
-    className: "fretboard-editor"
+    className: compact ? "fretboard-editor compact-fretboard-editor" : "fretboard-editor"
   }, React.createElement("div", {
     className: "fretboard-toolbar"
   }, React.createElement("div", null, React.createElement("span", {
@@ -2606,6 +2598,7 @@ function ChartSection({
   onToggleBatch,
   onBatchInputChange,
   onBatchSubmit,
+  editorSlot,
   onDropAt,
   onDragOverAtEnd,
   isDragging,
@@ -2673,7 +2666,7 @@ function ChartSection({
       onDelete();
     },
     title: "\u5220\u9664\u6BB5\u843D"
-  }, "x"))), batchOpen ? React.createElement("div", {
+  }, "x"))), editorSlot, batchOpen ? React.createElement("div", {
     className: "batch-input-panel",
     onClick: event => event.stopPropagation()
   }, React.createElement("textarea", {
@@ -2698,7 +2691,6 @@ function ChartSection({
 }
 function ChartItem({
   item,
-  bulkMode,
   selected,
   onSelect,
   isDragging,
@@ -2709,10 +2701,9 @@ function ChartItem({
   onDropBefore,
   onDuplicate,
   onRemove,
-  onEdit,
-  onUse
+  onEdit
 }) {
-  const cardClass = ["chart-card", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
+  const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
   const itemName = displayChartItemName(item);
   return React.createElement("article", {
     className: cardClass,
@@ -2739,51 +2730,26 @@ function ChartItem({
       onDropBefore();
     },
     onClick: onEdit
-  }, bulkMode ? React.createElement("label", {
-    className: "card-select",
-    onClick: event => event.stopPropagation()
-  }, React.createElement("input", {
-    type: "checkbox",
-    checked: selected,
-    onChange: onSelect,
-    "aria-label": `选择 ${itemName}`
-  })) : null, React.createElement("div", {
-    className: "chart-card-main"
-  }, React.createElement("h3", null, "[", itemName, "]"), React.createElement("p", {
-    className: "card-shape-code"
-  }, compactShape(item.frets)), item.note ? React.createElement("p", {
-    className: "card-note"
-  }, item.note) : null), React.createElement("div", {
-    className: "chart-card-actions"
   }, React.createElement("button", {
-    className: "icon-button",
+    className: selected ? "card-select-circle selected-select-circle" : "card-select-circle",
     onClick: event => {
       event.stopPropagation();
-      onEdit();
+      onSelect();
     },
-    title: "\u7F16\u8F91"
-  }, "\u7F16\u8F91"), React.createElement("button", {
-    className: "icon-button",
-    onClick: event => {
-      event.stopPropagation();
-      onUse(item.frets);
-    },
-    title: "\u5E26\u5165\u8BC6\u522B"
-  }, "\u8BC6\u522B"), React.createElement("button", {
-    className: "icon-button",
-    onClick: event => {
-      event.stopPropagation();
-      onDuplicate();
-    },
-    title: "\u590D\u5236\u8FD9\u4E2A\u548C\u5F26"
-  }, "\u590D\u5236"), React.createElement("button", {
-    className: "icon-button danger-button",
-    onClick: event => {
-      event.stopPropagation();
-      onRemove();
-    },
-    title: "\u5220\u9664"
-  }, "x")));
+    title: selected ? "取消选择" : "选择和弦",
+    "aria-pressed": selected,
+    "aria-label": `${selected ? "取消选择" : "选择"} ${itemName}`
+  }), React.createElement("div", {
+    className: "chart-card-main"
+  }, React.createElement("h3", null, "[", itemName, "]"), React.createElement("div", {
+    className: "chart-diagram-wrap"
+  }, React.createElement(ChordDiagram, {
+    shape: item.frets,
+    root: item.root,
+    startAtLowestFret: true
+  })), item.note ? React.createElement("p", {
+    className: "card-note"
+  }, item.note) : null));
 }
 function VoicingCard({
   parsed,

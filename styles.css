@@ -731,6 +731,12 @@ h2 {
   box-shadow: 0 16px 34px rgba(75, 62, 42, 0.12);
 }
 
+.section-chord-editor-panel {
+  margin: 0;
+  padding: 12px;
+  background: #fffdf8;
+}
+
 .chord-editor-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1fr);
@@ -741,6 +747,28 @@ h2 {
 .chord-editor-side {
   display: grid;
   gap: 12px;
+}
+
+.section-chord-editor-panel .chord-editor-layout {
+  grid-template-columns: minmax(250px, 360px) minmax(0, 1fr);
+}
+
+.compact-fretboard-editor {
+  gap: 8px;
+  padding: 10px;
+}
+
+.compact-fretboard-editor .fretboard-toolbar h3 {
+  font-size: 0.92rem;
+}
+
+.compact-fretboard-editor .click-fretboard {
+  min-height: 260px;
+}
+
+.compact-fretboard-editor .position-chips,
+.compact-fretboard-editor .string-status-grid {
+  gap: 6px;
 }
 
 .candidate-group {
@@ -1184,7 +1212,7 @@ h2 {
 
 .chart-sequence {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(138px, 178px));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 178px));
   gap: 10px;
   align-items: start;
 }
@@ -1220,7 +1248,7 @@ h2 {
   position: relative;
   display: grid;
   gap: 8px;
-  min-height: 92px;
+  min-height: 184px;
   padding: 12px 10px 10px;
   border: 2px solid var(--line);
   border-radius: 8px;
@@ -1237,6 +1265,12 @@ h2 {
   border-color: var(--accent);
   background: #fff9ec;
   transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(75, 62, 42, 0.18);
+}
+
+.selected-chart-card {
+  border-color: #171512;
+  background: #fff9ec;
   box-shadow: 0 18px 38px rgba(75, 62, 42, 0.18);
 }
 
@@ -1273,23 +1307,42 @@ h2 {
   align-items: start;
 }
 
-.card-select {
+.card-select-circle {
   position: absolute;
   top: 8px;
   left: 8px;
   z-index: 3;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border: 2px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface);
+  box-shadow: 0 8px 18px rgba(75, 62, 42, 0.16);
+  opacity: 0;
+  transform: scale(0.86);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease;
 }
 
-.card-select input {
-  width: 16px;
-  height: 16px;
+.chart-card:hover .card-select-circle,
+.chart-card:focus-within .card-select-circle,
+.selected-select-circle {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.selected-select-circle {
+  background: #171512;
+}
+
+.selected-select-circle::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: inherit;
+  background: var(--accent);
 }
 
 .chart-diagram-wrap {
@@ -1303,18 +1356,13 @@ h2 {
 
 .chart-card h3 {
   min-height: 22px;
-  padding-right: 96px;
-  padding-left: 0;
+  padding-left: 28px;
   overflow: hidden;
   font-size: 0.98rem;
   font-weight: 900;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.card-select + .chart-card-main h3 {
-  padding-left: 30px;
 }
 
 .card-shape-code {
@@ -1515,6 +1563,15 @@ h2 {
 
   .chart-sequence {
     grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+  }
+
+  .card-select-circle {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .section-chord-editor-panel .chord-editor-layout {
+    grid-template-columns: 1fr;
   }
 
   .chart-diagram-wrap {

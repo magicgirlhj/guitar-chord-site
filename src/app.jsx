@@ -1011,7 +1011,6 @@ function App() {
   const [chordEditor, setChordEditor] = useState(createChordEditorState);
   const [openBatchSectionId, setOpenBatchSectionId] = useState("");
   const [batchInput, setBatchInput] = useState("");
-  const [bulkMode, setBulkMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [bulkTargetSectionId, setBulkTargetSectionId] = useState("");
   const [draggedChord, setDraggedChord] = useState(null);
@@ -2162,9 +2161,6 @@ function App() {
                 <button className="ghost-button add-button" onClick={createSection}>
                   添加段落
                 </button>
-                <button className="ghost-button" onClick={() => setBulkMode((mode) => !mode)}>
-                  {bulkMode ? "退出批量" : "批量编辑"}
-                </button>
                 <button className="ghost-button" onClick={copyChart}>
                   复制整首
                 </button>
@@ -2356,14 +2352,7 @@ function App() {
               曲谱库会自动保存到当前浏览器；登录云同步后，会在同一账号的设备间合并保存。
             </p>
 
-            <div className="songbook-command-row">
-              <button className="primary-button add-chord-button" onClick={() => openNewChordEditor(activeSection.id)}>
-                + 添加和弦按法
-              </button>
-              <span className="hint">当前加入目标：{activeSection.title}</span>
-            </div>
-
-            {bulkMode ? (
+            {selectedItemIds.length ? (
               <div className="bulk-toolbar">
                 <strong>已选 {selectedItemIds.length} 个</strong>
                 <button className="ghost-button" onClick={copySelectedItems}>
@@ -2393,30 +2382,6 @@ function App() {
               </div>
             ) : null}
 
-            {chordEditor.open ? (
-              <ChordEditorPanel
-                editor={chordEditor}
-                recognition={chordEditorRecognition}
-                candidateNames={chordEditorNames}
-                selectedName={chordEditorSelectedName}
-                onBaseFretChange={(baseFret) => setChordEditor((editor) => ({ ...editor, baseFret }))}
-                onStringValueChange={setChordEditorStringValue}
-                onSelectName={(name) =>
-                  setChordEditor((editor) => ({
-                    ...editor,
-                    selectedName: name,
-                    customName: name === CUSTOM_CHORD_NAME ? editor.customName : "",
-                  }))
-                }
-                onCustomNameChange={(customName) =>
-                  setChordEditor((editor) => ({ ...editor, customName, selectedName: CUSTOM_CHORD_NAME }))
-                }
-                onNoteChange={(note) => setChordEditor((editor) => ({ ...editor, note }))}
-                onSave={saveChordEditorItem}
-                onCancel={closeChordEditor}
-              />
-            ) : null}
-
             <div className="chart-sections" aria-label="曲谱段落">
               {chartSections.map((section) => (
                 <ChartSection
@@ -2439,6 +2404,32 @@ function App() {
                   }}
                   onBatchInputChange={setBatchInput}
                   onBatchSubmit={() => parseBatchIntoSection(section.id)}
+                  editorSlot={
+                    chordEditor.open && chordEditor.sectionId === section.id ? (
+                      <ChordEditorPanel
+                        compact
+                        editor={chordEditor}
+                        recognition={chordEditorRecognition}
+                        candidateNames={chordEditorNames}
+                        selectedName={chordEditorSelectedName}
+                        onBaseFretChange={(baseFret) => setChordEditor((editor) => ({ ...editor, baseFret }))}
+                        onStringValueChange={setChordEditorStringValue}
+                        onSelectName={(name) =>
+                          setChordEditor((editor) => ({
+                            ...editor,
+                            selectedName: name,
+                            customName: name === CUSTOM_CHORD_NAME ? editor.customName : "",
+                          }))
+                        }
+                        onCustomNameChange={(customName) =>
+                          setChordEditor((editor) => ({ ...editor, customName, selectedName: CUSTOM_CHORD_NAME }))
+                        }
+                        onNoteChange={(note) => setChordEditor((editor) => ({ ...editor, note }))}
+                        onSave={saveChordEditorItem}
+                        onCancel={closeChordEditor}
+                      />
+                    ) : null
+                  }
                   onDropAt={(index) => handleChartDrop(section.id, index)}
                   onDragOverAtEnd={() => markChartDropTarget(section.id, section.items.length)}
                   isDragging={Boolean(draggedChord)}
@@ -2448,7 +2439,6 @@ function App() {
                     <ChartItem
                       item={item}
                       key={item.id}
-                      bulkMode={bulkMode}
                       selected={selectedItemIds.includes(item.id)}
                       onSelect={() => toggleSelectedItem(item.id)}
                       isDragging={draggedChord?.itemId === item.id}
@@ -2468,7 +2458,6 @@ function App() {
                       onDuplicate={() => duplicateSectionItem(section.id, item.id)}
                       onRemove={() => removeSectionItem(section.id, item.id)}
                       onEdit={() => openEditChordEditor(section.id, item)}
-                      onUse={(frets) => useShape(frets)}
                     />
                   ))}
                 </ChartSection>
@@ -2488,6 +2477,7 @@ function App() {
 }
 
 function ChordEditorPanel({
+  compact = false,
   editor,
   recognition,
   candidateNames,
@@ -2501,7 +2491,7 @@ function ChordEditorPanel({
   onCancel,
 }) {
   return (
-    <section className="chord-editor-panel">
+    <section className={compact ? "chord-editor-panel section-chord-editor-panel" : "chord-editor-panel"}>
       <div className="panel-header compact-header">
         <div className="panel-title">
           <span className="eyebrow">{editor.mode === "edit" ? "Edit Chord" : "Add Chord"}</span>
@@ -2512,6 +2502,7 @@ function ChordEditorPanel({
 
       <div className="chord-editor-layout">
         <ChordInputDiagram
+          compact={compact}
           baseFret={editor.baseFret}
           values={editor.frets}
           onBaseFretChange={onBaseFretChange}
@@ -2590,7 +2581,7 @@ function ChordEditorPanel({
   );
 }
 
-function ChordInputDiagram({ baseFret, values, onBaseFretChange, onStringValueChange }) {
+function ChordInputDiagram({ baseFret, values, onBaseFretChange, onStringValueChange, compact = false }) {
   const parsedValues = values.map(parseFret);
   const fretRows = Array.from({ length: 5 }, (_, index) => baseFret + index);
   const quickPositions = [1, 3, 5, 7, 9, 12];
@@ -2615,7 +2606,7 @@ function ChordInputDiagram({ baseFret, values, onBaseFretChange, onStringValueCh
   }
 
   return (
-    <div className="fretboard-editor">
+    <div className={compact ? "fretboard-editor compact-fretboard-editor" : "fretboard-editor"}>
       <div className="fretboard-toolbar">
         <div>
           <span className="eyebrow">Chord Input</span>
@@ -2727,6 +2718,7 @@ function ChartSection({
   onToggleBatch,
   onBatchInputChange,
   onBatchSubmit,
+  editorSlot,
   onDropAt,
   onDragOverAtEnd,
   isDragging,
@@ -2833,6 +2825,8 @@ function ChartSection({
         </div>
       </div>
 
+      {editorSlot}
+
       {batchOpen ? (
         <div className="batch-input-panel" onClick={(event) => event.stopPropagation()}>
           <textarea
@@ -2862,7 +2856,6 @@ function ChartSection({
 
 function ChartItem({
   item,
-  bulkMode,
   selected,
   onSelect,
   isDragging,
@@ -2874,9 +2867,8 @@ function ChartItem({
   onDuplicate,
   onRemove,
   onEdit,
-  onUse,
 }) {
-  const cardClass = ["chart-card", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""]
+  const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""]
     .filter(Boolean)
     .join(" ");
   const itemName = displayChartItemName(item);
@@ -2908,57 +2900,22 @@ function ChartItem({
       }}
       onClick={onEdit}
     >
-      {bulkMode ? (
-        <label className="card-select" onClick={(event) => event.stopPropagation()}>
-          <input type="checkbox" checked={selected} onChange={onSelect} aria-label={`选择 ${itemName}`} />
-        </label>
-      ) : null}
+      <button
+        className={selected ? "card-select-circle selected-select-circle" : "card-select-circle"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+        title={selected ? "取消选择" : "选择和弦"}
+        aria-pressed={selected}
+        aria-label={`${selected ? "取消选择" : "选择"} ${itemName}`}
+      />
       <div className="chart-card-main">
         <h3>[{itemName}]</h3>
-        <p className="card-shape-code">{compactShape(item.frets)}</p>
+        <div className="chart-diagram-wrap">
+          <ChordDiagram shape={item.frets} root={item.root} startAtLowestFret />
+        </div>
         {item.note ? <p className="card-note">{item.note}</p> : null}
-      </div>
-      <div className="chart-card-actions">
-        <button
-          className="icon-button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onEdit();
-          }}
-          title="编辑"
-        >
-          编辑
-        </button>
-        <button
-          className="icon-button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onUse(item.frets);
-          }}
-          title="带入识别"
-        >
-          识别
-        </button>
-        <button
-          className="icon-button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDuplicate();
-          }}
-          title="复制这个和弦"
-        >
-          复制
-        </button>
-        <button
-          className="icon-button danger-button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove();
-          }}
-          title="删除"
-        >
-          x
-        </button>
       </div>
     </article>
   );
