@@ -429,6 +429,9 @@ const PASSWORD_SETUP_DONE_KEY_PREFIX = "guitar-chord-password-setup-done-v1:";
 const SUPABASE_LIBRARY_TABLE = "guitar_chart_libraries";
 const CLOUD_SAVE_DELAY = 900;
 const DEFAULT_SECTION_TITLE = "前奏";
+const UNKNOWN_CHORD_NAME = "未知和弦";
+const CUSTOM_CHORD_NAME = "自定义名称";
+const EMPTY_FRET_VALUES = ["x", "x", "x", "x", "x", "x"];
 function mod(value, size = 12) {
   return (value % size + size) % size;
 }
@@ -437,6 +440,18 @@ function noteName(pc, preferFlats = false) {
 }
 function compactShape(frets) {
   return frets.map(fret => fret === null ? "x" : String(fret)).join(" ");
+}
+function compactShapeCode(frets) {
+  return frets.map(fret => fret === null ? "x" : String(fret)).join("");
+}
+function fretValuesFromFrets(frets) {
+  return normalizeFrets(frets).map(fret => fret === null ? "x" : String(fret));
+}
+function normalizeFrets(frets) {
+  const values = Array.isArray(frets) ? frets : EMPTY_FRET_VALUES;
+  const normalized = values.slice(0, 6).map(parseFret);
+  while (normalized.length < 6) normalized.push(null);
+  return normalized.map(fret => fret === undefined ? null : fret);
 }
 function parseChordName(value) {
   const raw = value.trim().replace(/\s+/g, "");
@@ -645,8 +660,10 @@ function shapePositionName(frets) {
   return `第 ${start} 把位`;
 }
 function parseFret(value) {
-  const normalized = value.trim().toLowerCase();
+  if (value === null) return null;
+  const normalized = String(value ?? "").trim().toLowerCase();
   if (!normalized || ["x", "m", "-"].includes(normalized)) return null;
+  if (["o", "open"].includes(normalized)) return 0;
   const parsed = Number.parseInt(normalized, 10);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 24) return undefined;
   return parsed;
@@ -721,19 +738,52 @@ function dedupeResults(results) {
 function createId(prefix = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
+function detectedNamesForFrets(frets) {
+  return identifyChord(fretValuesFromFrets(frets)).results.map(result => result.name);
+}
+function displayChartItemName(item) {
+  return item.customName || item.selectedName || item.name || item.detectedNames?.[0] || UNKNOWN_CHORD_NAME;
+}
+function createChartItem({
+  frets,
+  selectedName = "",
+  customName = "",
+  detectedNames,
+  note = "",
+  source = "曲谱记录"
+}) {
+  const normalizedFrets = normalizeFrets(frets);
+  const names = Array.isArray(detectedNames) ? detectedNames.filter(Boolean) : detectedNamesForFrets(normalizedFrets);
+  const cleanCustomName = customName.trim();
+  const cleanSelectedName = selectedName.trim();
+  const name = cleanCustomName || cleanSelectedName || names[0] || UNKNOWN_CHORD_NAME;
+  return normalizeChartItem({
+    id: createId("chord"),
+    name,
+    frets: normalizedFrets,
+    detectedNames: names,
+    selectedName: cleanSelectedName || (cleanCustomName ? "" : names[0] || UNKNOWN_CHORD_NAME),
+    customName: cleanCustomName,
+    note,
+    source
+  });
+}
 function normalizeChartItem(item = {}) {
   item = item && typeof item === "object" ? item : {};
-  const frets = Array.isArray(item.frets) ? item.frets.map(fret => {
-    if (fret === null) return null;
-    const parsed = Number.parseInt(fret, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  }).slice(0, 6) : ["x", "x", "x", "x", "x", "x"].map(parseFret);
-  while (frets.length < 6) frets.push(null);
-  const name = item.name || "未知和弦";
+  const frets = normalizeFrets(item.frets);
+  const detectedNames = Array.isArray(item.detectedNames) ? item.detectedNames.filter(Boolean) : detectedNamesForFrets(frets);
+  const legacyName = item.name && item.name !== UNKNOWN_CHORD_NAME ? item.name : "";
+  const selectedName = item.selectedName || legacyName || detectedNames[0] || UNKNOWN_CHORD_NAME;
+  const customName = String(item.customName || "").trim();
+  const name = customName || selectedName || UNKNOWN_CHORD_NAME;
   return {
     id: item.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     name,
     frets,
+    detectedNames,
+    selectedName,
+    customName,
+    note: item.note || "",
     root: Number.isInteger(item.root) ? item.root : rootFromChordName(name),
     shape: item.shape || compactShape(frets),
     position: item.position || shapePositionName(frets),
@@ -934,21 +984,71 @@ function rootFromChordName(name) {
 }
 function chartItemsToText(title, items) {
   if (!items.length) return "";
-  const rows = items.map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`).join("\n");
+  const rows = sectionClipboardText(items);
   return `${title || "未命名曲谱"}\n${rows}`;
 }
 function chartSectionsToText(title, sections) {
   const populated = sections.filter(section => section.items.length);
   if (!populated.length) return "";
-  return `${title || "未命名曲谱"}\n${populated.map(section => `\n[${section.title}]\n${section.items.map((item, index) => `${index + 1}. ${item.name}  ${item.shape}  ${item.position}`).join("\n")}`).join("\n")}`;
+  return `${title || "未命名曲谱"}\n${populated.map(section => `\n[${section.title}]\n${sectionClipboardText(section.items)}`).join("\n")}`;
 }
 function flattenSections(sections = []) {
   return (Array.isArray(sections) ? sections : []).flatMap(section => Array.isArray(section?.items) ? section.items : []);
 }
+function createChordEditorState(sectionId = "", item = null) {
+  return {
+    open: false,
+    mode: "add",
+    sectionId,
+    itemId: null,
+    frets: [...EMPTY_FRET_VALUES],
+    baseFret: 1,
+    selectedName: "",
+    customName: "",
+    note: "",
+    ...item
+  };
+}
+function parseShapeLine(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return null;
+  let label = "";
+  let shapeText = raw;
+  const colonIndex = raw.indexOf(":");
+  if (colonIndex > -1) {
+    label = raw.slice(0, colonIndex).trim();
+    shapeText = raw.slice(colonIndex + 1).trim();
+  }
+  const tokens = /\s|,|，/.test(shapeText) ? shapeText.split(/[\s,，]+/).filter(Boolean) : shapeText.split("");
+  if (tokens.length !== 6) return {
+    error: `无法解析：${raw}`
+  };
+  const frets = tokens.map(parseFret);
+  if (frets.some(fret => fret === undefined)) return {
+    error: `品位需为 0-24 或 x：${raw}`
+  };
+  if (frets.every(fret => fret === null)) return {
+    error: `至少需要一根有声弦：${raw}`
+  };
+  return {
+    label,
+    frets
+  };
+}
+function sectionClipboardText(items = []) {
+  return items.map(item => `${displayChartItemName(item)}: ${compactShapeCode(item.frets)}`).join("\n");
+}
 function App() {
+  const [activeTab, setActiveTab] = useState("songbook");
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
   const [editorBaseFret, setEditorBaseFret] = useState(1);
+  const [chordEditor, setChordEditor] = useState(createChordEditorState);
+  const [openBatchSectionId, setOpenBatchSectionId] = useState("");
+  const [batchInput, setBatchInput] = useState("");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [bulkTargetSectionId, setBulkTargetSectionId] = useState("");
   const [draggedChord, setDraggedChord] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
@@ -977,10 +1077,22 @@ function App() {
   const parsedChord = useMemo(() => parseChordName(chordQuery), [chordQuery]);
   const voicings = useMemo(() => parsedChord.ok ? getVoicings(parsedChord) : [], [parsedChord]);
   const recognition = useMemo(() => identifyChord(fretValues), [fretValues]);
+  const chordEditorRecognition = useMemo(() => identifyChord(chordEditor.frets), [chordEditor.frets]);
+  const chordEditorNames = chordEditorRecognition.results.map(result => result.name);
+  const chordEditorSelectedName = chordEditor.customName ? CUSTOM_CHORD_NAME : chordEditor.selectedName || chordEditorNames[0] || UNKNOWN_CHORD_NAME;
   const syncConfigured = hasSupabaseConfig(supabaseConfig);
   useEffect(() => {
     window.localStorage.setItem(CHART_STORAGE_KEY, JSON.stringify(chartLibrary));
   }, [chartLibrary]);
+  useEffect(() => {
+    if (!bulkTargetSectionId || !chartSections.some(section => section.id === bulkTargetSectionId)) {
+      setBulkTargetSectionId(activeSection.id);
+    }
+  }, [activeSection.id, bulkTargetSectionId, chartSections]);
+  useEffect(() => {
+    const validIds = new Set(chartSections.flatMap(section => section.items.map(item => item.id)));
+    setSelectedItemIds(ids => ids.filter(id => validIds.has(id)));
+  }, [chartSections]);
   useEffect(() => {
     if (!hasSupabaseConfig(supabaseConfig)) {
       setSyncClient(null);
@@ -1175,6 +1287,9 @@ function App() {
       activeChartId: id
     }));
     const chart = chartLibrary.charts.find(item => item.id === id);
+    setChordEditor(createChordEditorState());
+    setSelectedItemIds([]);
+    setOpenBatchSectionId("");
     setChartMessage(chart ? `已切换：${chart.title}` : "");
   }
   function createChart() {
@@ -1212,6 +1327,7 @@ function App() {
     setChartMessage("已删除当前曲谱。");
   }
   function useShape(frets) {
+    setActiveTab("tools");
     setFretValues(frets.map(fret => fret === null ? "x" : String(fret)));
     const stats = shapeStats(frets);
     setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
@@ -1222,18 +1338,14 @@ function App() {
       });
     });
   }
-  function addChartItem(name, frets, source, root = rootFromChordName(name)) {
-    const item = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      name,
+  function addChartItem(name, frets, source) {
+    const item = createChartItem({
       frets,
-      root,
-      shape: compactShape(frets),
-      position: shapePositionName(frets),
+      selectedName: name || "",
       source
-    };
+    });
     setChartItems(items => [...items, item]);
-    setChartMessage(`已加入到「${activeSection.title}」：${name}`);
+    setChartMessage(`已加入到「${activeSection.title}」：${displayChartItemName(item)}`);
   }
   function addCurrentInputToChart() {
     const parsedFrets = fretValues.map(parseFret);
@@ -1245,8 +1357,215 @@ function App() {
       setChartMessage("至少输入一根有声弦。");
       return;
     }
-    const bestName = recognition.results[0]?.name || "未知和弦";
-    addChartItem(bestName, parsedFrets, "手动输入", rootFromChordName(bestName));
+    const bestName = recognition.results[0]?.name || UNKNOWN_CHORD_NAME;
+    addChartItem(bestName, parsedFrets, "Reverse Finder");
+  }
+  function openNewChordEditor(sectionId = activeSection.id) {
+    setActiveTab("songbook");
+    selectSection(sectionId);
+    setChordEditor({
+      ...createChordEditorState(sectionId),
+      open: true,
+      mode: "add",
+      sectionId
+    });
+  }
+  function openEditChordEditor(sectionId, item) {
+    setActiveTab("songbook");
+    selectSection(sectionId);
+    setChordEditor({
+      ...createChordEditorState(sectionId),
+      open: true,
+      mode: "edit",
+      sectionId,
+      itemId: item.id,
+      frets: fretValuesFromFrets(item.frets),
+      baseFret: shapeStats(item.frets).isOpen || shapeStats(item.frets).startFret <= 1 ? 1 : shapeStats(item.frets).startFret,
+      selectedName: item.customName ? CUSTOM_CHORD_NAME : item.selectedName || item.name || "",
+      customName: item.customName || "",
+      note: item.note || ""
+    });
+  }
+  function closeChordEditor() {
+    setChordEditor(createChordEditorState(activeSection.id));
+  }
+  function setChordEditorStringValue(index, value) {
+    setChordEditor(editor => {
+      const frets = [...editor.frets];
+      frets[index] = value === null ? "x" : String(value);
+      return {
+        ...editor,
+        frets
+      };
+    });
+  }
+  function saveChordEditorItem() {
+    const parsedFrets = chordEditor.frets.map(parseFret);
+    if (parsedFrets.some(fret => fret === undefined)) {
+      setChartMessage("品位格式有误，暂时不能加入曲谱。");
+      return;
+    }
+    if (parsedFrets.every(fret => fret === null)) {
+      setChartMessage("至少输入一根有声弦。");
+      return;
+    }
+    const customName = chordEditor.customName.trim();
+    const selectedName = customName ? "" : chordEditor.selectedName || chordEditorNames[0] || UNKNOWN_CHORD_NAME;
+    const item = createChartItem({
+      frets: parsedFrets,
+      detectedNames: chordEditorNames,
+      selectedName,
+      customName,
+      note: chordEditor.note,
+      source: chordEditor.mode === "edit" ? "编辑" : "曲谱记录"
+    });
+    if (chordEditor.mode === "edit" && chordEditor.itemId) {
+      updateChartSections(sections => sections.map(section => section.id === chordEditor.sectionId ? {
+        ...section,
+        items: section.items.map(existing => existing.id === chordEditor.itemId ? {
+          ...item,
+          id: existing.id
+        } : existing)
+      } : section));
+      setChartMessage(`已更新：${displayChartItemName(item)}`);
+    } else {
+      updateChartSections(sections => sections.map(section => section.id === chordEditor.sectionId ? {
+        ...section,
+        items: [...section.items, item]
+      } : section));
+      setChartMessage(`已加入到「${activeSection.title}」：${displayChartItemName(item)}`);
+    }
+    closeChordEditor();
+  }
+  function parseBatchIntoSection(sectionId) {
+    const lines = batchInput.split(/\r?\n/);
+    const parsed = [];
+    const errors = [];
+    lines.forEach((line, index) => {
+      if (!line.trim()) return;
+      const result = parseShapeLine(line);
+      if (!result || result.error) {
+        errors.push(result?.error || `第 ${index + 1} 行为空`);
+        return;
+      }
+      const detectedNames = detectedNamesForFrets(result.frets);
+      parsed.push(createChartItem({
+        frets: result.frets,
+        detectedNames,
+        selectedName: result.label || detectedNames[0] || UNKNOWN_CHORD_NAME,
+        source: "批量输入"
+      }));
+    });
+    if (!parsed.length) {
+      setChartMessage(errors[0] || "没有解析到可用按法。");
+      return;
+    }
+    updateChartSections(sections => sections.map(section => section.id === sectionId ? {
+      ...section,
+      items: [...section.items, ...parsed]
+    } : section));
+    setBatchInput("");
+    setOpenBatchSectionId("");
+    setChartMessage(errors.length ? `已加入 ${parsed.length} 个和弦；有 ${errors.length} 行未解析。` : `已批量加入 ${parsed.length} 个和弦。`);
+  }
+  async function copySection(section) {
+    const text = sectionClipboardText(section.items);
+    if (!text) {
+      setChartMessage("这个段落还是空的。");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setChartMessage(`已复制「${section.title}」。`);
+    } catch {
+      setChartMessage(text);
+    }
+  }
+  function duplicateSection(sectionId) {
+    updateActiveChart(chart => {
+      const source = chart.sections.find(section => section.id === sectionId);
+      if (!source) return {};
+      const copy = {
+        ...source,
+        id: createId("section"),
+        title: `${source.title} 复制`,
+        items: source.items.map(item => ({
+          ...item,
+          id: createId("chord"),
+          source: `${item.source || "曲谱记录"} · 复制`
+        }))
+      };
+      return {
+        activeSectionId: copy.id,
+        sections: [...chart.sections, copy]
+      };
+    });
+    setChartMessage("已复制段落。");
+  }
+  function clearSection(sectionId) {
+    updateChartSections(sections => sections.map(section => section.id === sectionId ? {
+      ...section,
+      items: []
+    } : section));
+    setSelectedItemIds([]);
+    setChartMessage("已清空段落。");
+  }
+  function toggleSelectedItem(itemId) {
+    setSelectedItemIds(ids => ids.includes(itemId) ? ids.filter(id => id !== itemId) : [...ids, itemId]);
+  }
+  function selectedItemsInChart() {
+    const selected = new Set(selectedItemIds);
+    return chartSections.flatMap(section => section.items.filter(item => selected.has(item.id)));
+  }
+  async function copySelectedItems() {
+    const items = selectedItemsInChart();
+    if (!items.length) {
+      setChartMessage("请先选择和弦。");
+      return;
+    }
+    const text = sectionClipboardText(items);
+    try {
+      await navigator.clipboard.writeText(text);
+      setChartMessage(`已复制 ${items.length} 个和弦。`);
+    } catch {
+      setChartMessage(text);
+    }
+  }
+  function deleteSelectedItems() {
+    if (!selectedItemIds.length) {
+      setChartMessage("请先选择和弦。");
+      return;
+    }
+    const selected = new Set(selectedItemIds);
+    updateChartSections(sections => sections.map(section => ({
+      ...section,
+      items: section.items.filter(item => !selected.has(item.id))
+    })));
+    setSelectedItemIds([]);
+    setChartMessage("已删除选中的和弦。");
+  }
+  function transferSelectedItems(copy = false) {
+    const targetSectionId = bulkTargetSectionId || activeSection.id;
+    const selected = new Set(selectedItemIds);
+    const movingItems = selectedItemsInChart();
+    if (!movingItems.length) {
+      setChartMessage("请先选择和弦。");
+      return;
+    }
+    updateChartSections(sections => sections.map(section => {
+      const baseItems = copy ? section.items : section.items.filter(item => !selected.has(item.id));
+      const items = section.id === targetSectionId ? [...baseItems, ...movingItems.map(item => copy ? {
+        ...item,
+        id: createId("chord"),
+        source: `${item.source || "曲谱记录"} · 复制`
+      } : item)] : baseItems;
+      return {
+        ...section,
+        items
+      };
+    }));
+    if (!copy) setSelectedItemIds([]);
+    setChartMessage(`${copy ? "已复制" : "已移动"} ${movingItems.length} 个和弦。`);
   }
   function moveChartItem(id, direction) {
     setChartItems(items => {
@@ -1652,14 +1971,23 @@ function App() {
     className: "brand-row"
   }, React.createElement("div", {
     className: "brand-mark"
-  }, "G"), React.createElement("h1", null, "\u5409\u4ED6\u548C\u5F26\u67E5\u8BE2")), React.createElement("p", {
+  }, "G"), React.createElement("h1", null, "Guitar Songbook")), React.createElement("p", {
     className: "subtitle"
-  }, "\u8F93\u5165\u548C\u5F26\u540D\u67E5\u770B\u5E38\u7528\u628A\u4F4D\uFF0C\u4E5F\u53EF\u4EE5\u8F93\u5165\u516D\u6839\u5F26\u7684\u54C1\u4F4D\u6765\u53CD\u5411\u8BC6\u522B\u53EF\u80FD\u7684\u548C\u5F26\u3002")), React.createElement("div", {
+  }, "\u4EE5\u6309\u6CD5\u4E3A\u4E2D\u5FC3\u8BB0\u5F55\u4E2A\u4EBA\u66F2\u8C31\uFF1B\u9700\u8981\u65F6\u518D\u7528\u548C\u5F26\u5DE5\u5177\u67E5\u540D\u5B57\u3001\u627E\u628A\u4F4D\u3002")), React.createElement("div", {
     className: "tuning-pill"
-  }, "\u6807\u51C6\u8C03\u5F26 ", React.createElement("strong", null, "E A D G B e"))), React.createElement("main", {
+  }, "\u6807\u51C6\u8C03\u5F26 ", React.createElement("strong", null, "E A D G B e"))), React.createElement("nav", {
+    className: "app-tabs",
+    "aria-label": "\u4E3B\u529F\u80FD"
+  }, React.createElement("button", {
+    className: activeTab === "songbook" ? "tab-button active-tab" : "tab-button",
+    onClick: () => setActiveTab("songbook")
+  }, "\u66F2\u8C31\u8BB0\u5F55 / Songbook"), React.createElement("button", {
+    className: activeTab === "tools" ? "tab-button active-tab" : "tab-button",
+    onClick: () => setActiveTab("tools")
+  }, "\u548C\u5F26\u5DE5\u5177 / Chord Tools")), React.createElement("main", {
     className: "page-stack"
   }, React.createElement("section", {
-    className: "lookup-row"
+    className: activeTab === "tools" ? "lookup-row" : "lookup-row hidden-tab-panel"
   }, React.createElement("section", {
     className: "panel search-panel"
   }, React.createElement("div", {
@@ -1712,18 +2040,18 @@ function App() {
     className: "eyebrow"
   }, "Voicings"), React.createElement("h2", null, parsedChord.ok ? `${parsedChord.displayName} 按法` : "按法")), React.createElement("span", {
     className: "hint"
-  }, "\u4F18\u5148\u5C55\u793A\u5C01\u95ED\u548C\u9AD8\u628A\u4F4D\uFF1B\u70B9\u201C\u8BC6\u522B\u201D\u53EF\u5E26\u5165\u4E0B\u65B9\u3002")), parsedChord.ok && voicings.length ? React.createElement("div", {
+  }, "\u4F18\u5148\u5C55\u793A\u5C01\u95ED\u548C\u9AD8\u628A\u4F4D\uFF1B\u53EF\u52A0\u5165\u5F53\u524D\u66F2\u8C31\u3002")), parsedChord.ok && voicings.length ? React.createElement("div", {
     className: "voicing-grid"
   }, voicings.map(shape => React.createElement(VoicingCard, {
     key: compactShape(shape.frets),
     parsed: parsedChord,
     shape: shape,
     onUse: () => useShape(shape.frets),
-    onAdd: () => addChartItem(parsedChord.displayName, shape.frets, shape.name, parsedChord.root)
+    onAdd: () => addChartItem(parsedChord.displayName, shape.frets, shape.name)
   }))) : React.createElement("div", {
     className: "empty-state"
   }, "\u8F93\u5165\u4E00\u4E2A\u53EF\u8BC6\u522B\u7684\u548C\u5F26\u540D\u540E\uFF0C\u8FD9\u91CC\u4F1A\u663E\u793A\u591A\u4E2A\u628A\u4F4D\u56FE\u3002")))), React.createElement("section", {
-    className: "panel reverse-panel"
+    className: activeTab === "tools" ? "panel reverse-panel" : "panel reverse-panel hidden-tab-panel"
   }, React.createElement("div", {
     className: "panel-inner"
   }, React.createElement("div", {
@@ -1762,7 +2090,7 @@ function App() {
   }, "\u6E05\u7A7A")), React.createElement("button", {
     className: "primary-button add-current-button",
     onClick: addCurrentInputToChart
-  }, "\u52A0\u5165\u66F2\u8C31")), React.createElement("div", {
+  }, "\u52A0\u5165\u5F53\u524D\u66F2\u8C31")), React.createElement("div", {
     className: "recognition"
   }, recognition.error ? React.createElement("p", {
     className: "error-text"
@@ -1789,7 +2117,7 @@ function App() {
       width: `${result.confidence}%`
     }
   })))))))))), React.createElement("section", {
-    className: "panel chart-panel"
+    className: activeTab === "songbook" ? "panel chart-panel" : "panel chart-panel hidden-tab-panel"
   }, React.createElement("div", {
     className: "panel-inner"
   }, React.createElement("div", {
@@ -1798,18 +2126,21 @@ function App() {
     className: "panel-title"
   }, React.createElement("span", {
     className: "eyebrow"
-  }, "Chart Sequence"), React.createElement("h2", null, "\u66F2\u8C31\u8BB0\u5F55")), React.createElement("div", {
+  }, "Songbook"), React.createElement("h2", null, "\u66F2\u8C31\u8BB0\u5F55")), React.createElement("div", {
     className: "chart-actions"
   }, React.createElement("button", {
     className: "ghost-button add-button",
     onClick: createChart
-  }, "\u65B0\u5EFA"), React.createElement("button", {
+  }, "\u65B0\u5EFA\u66F2\u8C31"), React.createElement("button", {
     className: "ghost-button add-button",
     onClick: createSection
   }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("button", {
     className: "ghost-button",
+    onClick: () => setBulkMode(mode => !mode)
+  }, bulkMode ? "退出批量" : "批量编辑"), React.createElement("button", {
+    className: "ghost-button",
     onClick: copyChart
-  }, "\u590D\u5236"), React.createElement("button", {
+  }, "\u590D\u5236\u6574\u9996"), React.createElement("button", {
     className: "ghost-button",
     onClick: exportChart
   }, "\u5BFC\u51FA"), React.createElement("button", {
@@ -1957,6 +2288,61 @@ function App() {
   })), React.createElement("p", {
     className: "save-note"
   }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), React.createElement("div", {
+    className: "songbook-command-row"
+  }, React.createElement("button", {
+    className: "primary-button add-chord-button",
+    onClick: () => openNewChordEditor(activeSection.id)
+  }, "+ \u6DFB\u52A0\u548C\u5F26\u6309\u6CD5"), React.createElement("span", {
+    className: "hint"
+  }, "\u5F53\u524D\u52A0\u5165\u76EE\u6807\uFF1A", activeSection.title)), bulkMode ? React.createElement("div", {
+    className: "bulk-toolbar"
+  }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: copySelectedItems
+  }, "\u590D\u5236\u9009\u4E2D"), React.createElement("button", {
+    className: "ghost-button danger-button",
+    onClick: deleteSelectedItems
+  }, "\u5220\u9664\u9009\u4E2D"), React.createElement("select", {
+    className: "chart-select compact-select",
+    value: bulkTargetSectionId,
+    onChange: event => setBulkTargetSectionId(event.target.value),
+    "aria-label": "\u6279\u91CF\u64CD\u4F5C\u76EE\u6807\u6BB5\u843D"
+  }, chartSections.map(section => React.createElement("option", {
+    value: section.id,
+    key: section.id
+  }, section.title))), React.createElement("button", {
+    className: "ghost-button",
+    onClick: () => transferSelectedItems(false)
+  }, "\u79FB\u52A8\u5230\u6BB5\u843D"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: () => transferSelectedItems(true)
+  }, "\u590D\u5236\u5230\u6BB5\u843D")) : null, chordEditor.open ? React.createElement(ChordEditorPanel, {
+    editor: chordEditor,
+    recognition: chordEditorRecognition,
+    candidateNames: chordEditorNames,
+    selectedName: chordEditorSelectedName,
+    onBaseFretChange: baseFret => setChordEditor(editor => ({
+      ...editor,
+      baseFret
+    })),
+    onStringValueChange: setChordEditorStringValue,
+    onSelectName: name => setChordEditor(editor => ({
+      ...editor,
+      selectedName: name,
+      customName: name === CUSTOM_CHORD_NAME ? editor.customName : ""
+    })),
+    onCustomNameChange: customName => setChordEditor(editor => ({
+      ...editor,
+      customName,
+      selectedName: CUSTOM_CHORD_NAME
+    })),
+    onNoteChange: note => setChordEditor(editor => ({
+      ...editor,
+      note
+    })),
+    onSave: saveChordEditorItem,
+    onCancel: closeChordEditor
+  }) : null, React.createElement("div", {
     className: "chart-sections",
     "aria-label": "\u66F2\u8C31\u6BB5\u843D"
   }, chartSections.map(section => React.createElement(ChartSection, {
@@ -1966,6 +2352,19 @@ function App() {
     onSelect: () => selectSection(section.id),
     onRename: title => renameSection(section.id, title),
     onDelete: () => deleteSection(section.id),
+    onDuplicate: () => duplicateSection(section.id),
+    onClear: () => clearSection(section.id),
+    onCopy: () => copySection(section),
+    onAddChord: () => openNewChordEditor(section.id),
+    batchOpen: openBatchSectionId === section.id,
+    batchInput: batchInput,
+    onToggleBatch: () => {
+      selectSection(section.id);
+      setOpenBatchSectionId(id => id === section.id ? "" : section.id);
+      setBatchInput("");
+    },
+    onBatchInputChange: setBatchInput,
+    onBatchSubmit: () => parseBatchIntoSection(section.id),
     onDropAt: index => handleChartDrop(section.id, index),
     onDragOverAtEnd: () => markChartDropTarget(section.id, section.items.length),
     isDragging: Boolean(draggedChord),
@@ -1973,6 +2372,9 @@ function App() {
   }, section.items.map((item, index) => React.createElement(ChartItem, {
     item: item,
     key: item.id,
+    bulkMode: bulkMode,
+    selected: selectedItemIds.includes(item.id),
+    onSelect: () => toggleSelectedItem(item.id),
     isDragging: draggedChord?.itemId === item.id,
     isDropTarget: draggedChord?.itemId !== item.id && dragTarget?.sectionId === section.id && dragTarget?.index === index,
     onDragStart: () => {
@@ -1988,12 +2390,90 @@ function App() {
     onDropBefore: () => handleChartDrop(section.id, index),
     onDuplicate: () => duplicateSectionItem(section.id, item.id),
     onRemove: () => removeSectionItem(section.id, item.id),
+    onEdit: () => openEditChordEditor(section.id, item),
     onUse: frets => useShape(frets)
   }))))), chartMessage ? React.createElement("p", {
     className: "chart-message"
   }, chartMessage) : null)), React.createElement("p", {
     className: "footer-note"
   }, "MVP \u91C7\u7528\u6807\u51C6\u8C03\u5F26\u548C\u5341\u4E8C\u5E73\u5747\u5F8B\u505A\u8BC6\u522B\u3002\u5B9E\u9645\u97F3\u4E50\u8BED\u5883\u4F1A\u5F71\u54CD\u547D\u540D\uFF0C\u4F8B\u5982\u540C\u4E00\u7EC4\u97F3\u53EF\u80FD\u540C\u65F6\u5BF9\u5E94 Am7 \u4E0E C6\u3002")));
+}
+function ChordEditorPanel({
+  editor,
+  recognition,
+  candidateNames,
+  selectedName,
+  onBaseFretChange,
+  onStringValueChange,
+  onSelectName,
+  onCustomNameChange,
+  onNoteChange,
+  onSave,
+  onCancel
+}) {
+  return React.createElement("section", {
+    className: "chord-editor-panel"
+  }, React.createElement("div", {
+    className: "panel-header compact-header"
+  }, React.createElement("div", {
+    className: "panel-title"
+  }, React.createElement("span", {
+    className: "eyebrow"
+  }, editor.mode === "edit" ? "Edit Chord" : "Add Chord"), React.createElement("h2", null, editor.mode === "edit" ? "编辑和弦按法" : "+ 添加和弦按法")), React.createElement("span", {
+    className: "hint"
+  }, "\u53EF\u4EE5\u4FDD\u5B58\u65E0\u6CD5\u8BC6\u522B\u7684\u6309\u6CD5\uFF0C\u4E5F\u53EF\u4EE5\u4F7F\u7528\u81EA\u5B9A\u4E49\u540D\u79F0\u3002")), React.createElement("div", {
+    className: "chord-editor-layout"
+  }, React.createElement(ChordInputDiagram, {
+    baseFret: editor.baseFret,
+    values: editor.frets,
+    onBaseFretChange: onBaseFretChange,
+    onStringValueChange: onStringValueChange
+  }), React.createElement("div", {
+    className: "chord-editor-side"
+  }, React.createElement("div", {
+    className: "summary-strip compact-summary"
+  }, React.createElement("span", {
+    className: "metric"
+  }, "\u8F93\u5165 ", React.createElement("strong", null, editor.frets.join(" "))), React.createElement("span", {
+    className: "metric"
+  }, "\u97F3\u540D ", React.createElement("strong", null, recognition.notes.length ? recognition.notes.map(note => noteName(note.pc)).join(" ") : "无"))), recognition.error ? React.createElement("p", {
+    className: "error-text"
+  }, recognition.error) : null, React.createElement("div", {
+    className: "candidate-group",
+    "aria-label": "\u5019\u9009\u548C\u5F26\u540D\u79F0"
+  }, candidateNames.length ? candidateNames.map(name => React.createElement("button", {
+    className: selectedName === name ? "candidate-chip selected-candidate" : "candidate-chip",
+    key: name,
+    onClick: () => onSelectName(name)
+  }, name)) : React.createElement("span", {
+    className: "hint"
+  }, "\u6682\u65F6\u6CA1\u6709\u8BC6\u522B\u7ED3\u679C\u3002"), React.createElement("button", {
+    className: selectedName === UNKNOWN_CHORD_NAME ? "candidate-chip selected-candidate" : "candidate-chip",
+    onClick: () => onSelectName(UNKNOWN_CHORD_NAME)
+  }, "\u672A\u77E5\u548C\u5F26"), React.createElement("button", {
+    className: selectedName === CUSTOM_CHORD_NAME ? "candidate-chip selected-candidate" : "candidate-chip",
+    onClick: () => onSelectName(CUSTOM_CHORD_NAME)
+  }, "\u81EA\u5B9A\u4E49\u540D\u79F0")), selectedName === CUSTOM_CHORD_NAME ? React.createElement("input", {
+    className: "text-field compact-text-field",
+    value: editor.customName,
+    onChange: event => onCustomNameChange(event.target.value),
+    placeholder: "\u8F93\u5165\u81EA\u5B9A\u4E49\u540D\u79F0",
+    "aria-label": "\u81EA\u5B9A\u4E49\u548C\u5F26\u540D\u79F0"
+  }) : null, React.createElement("input", {
+    className: "text-field compact-text-field",
+    value: editor.note,
+    onChange: event => onNoteChange(event.target.value),
+    placeholder: "\u5907\u6CE8\uFF08\u53EF\u9009\uFF09",
+    "aria-label": "\u548C\u5F26\u5907\u6CE8"
+  }), React.createElement("div", {
+    className: "editor-actions"
+  }, React.createElement("button", {
+    className: "primary-button",
+    onClick: onSave
+  }, editor.mode === "edit" ? "保存修改" : "加入曲谱"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: onCancel
+  }, "\u53D6\u6D88")))));
 }
 function ChordInputDiagram({
   baseFret,
@@ -2117,6 +2597,15 @@ function ChartSection({
   onSelect,
   onRename,
   onDelete,
+  onDuplicate,
+  onClear,
+  onCopy,
+  onAddChord,
+  batchOpen,
+  batchInput,
+  onToggleBatch,
+  onBatchInputChange,
+  onBatchSubmit,
   onDropAt,
   onDragOverAtEnd,
   isDragging,
@@ -2148,20 +2637,70 @@ function ChartSection({
   }, active ? React.createElement("span", {
     className: "active-section-pill"
   }, "\u52A0\u5165\u76EE\u6807") : null, React.createElement("span", null, section.items.length, " \u4E2A\u548C\u5F26"), React.createElement("button", {
+    className: "ghost-button add-button",
+    onClick: event => {
+      event.stopPropagation();
+      onAddChord();
+    }
+  }, "+ \u6309\u6CD5"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: event => {
+      event.stopPropagation();
+      onToggleBatch();
+    }
+  }, "\u6279\u91CF\u8F93\u5165"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: event => {
+      event.stopPropagation();
+      onCopy();
+    }
+  }, "\u590D\u5236\u6BB5\u843D"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: event => {
+      event.stopPropagation();
+      onDuplicate();
+    }
+  }, "\u590D\u5236"), React.createElement("button", {
+    className: "ghost-button danger-button",
+    onClick: event => {
+      event.stopPropagation();
+      onClear();
+    }
+  }, "\u6E05\u7A7A"), React.createElement("button", {
     className: "icon-button danger-button",
     onClick: event => {
       event.stopPropagation();
       onDelete();
     },
     title: "\u5220\u9664\u6BB5\u843D"
-  }, "x"))), React.createElement("div", {
+  }, "x"))), batchOpen ? React.createElement("div", {
+    className: "batch-input-panel",
+    onClick: event => event.stopPropagation()
+  }, React.createElement("textarea", {
+    className: "batch-textarea",
+    value: batchInput,
+    onChange: event => onBatchInputChange(event.target.value),
+    placeholder: "x32010\n320003\n022000\n\n或：\nx 3 2 0 1 0",
+    "aria-label": `${section.title} 批量输入按法`
+  }), React.createElement("div", {
+    className: "batch-actions"
+  }, React.createElement("button", {
+    className: "ghost-button add-button",
+    onClick: onBatchSubmit
+  }, "\u751F\u6210\u548C\u5F26\u5757"), React.createElement("button", {
+    className: "ghost-button",
+    onClick: onToggleBatch
+  }, "\u53D6\u6D88"))) : null, React.createElement("div", {
     className: sequenceClass
   }, section.items.length ? children : React.createElement("div", {
     className: "section-empty"
-  }, "\u628A\u548C\u5F26\u5361\u7247\u62D6\u5230\u8FD9\u91CC\uFF0C\u6216\u9009\u4E2D\u672C\u6BB5\u540E\u70B9\u201C\u52A0\u5165\u201D\u3002")));
+  }, "\u70B9\u201C+ \u6309\u6CD5\u201D\u6216\u201C\u6279\u91CF\u8F93\u5165\u201D\u5F00\u59CB\u8BB0\u5F55\u8FD9\u4E2A\u6BB5\u843D\u3002")));
 }
 function ChartItem({
   item,
+  bulkMode,
+  selected,
+  onSelect,
   isDragging,
   isDropTarget,
   onDragStart,
@@ -2170,9 +2709,11 @@ function ChartItem({
   onDropBefore,
   onDuplicate,
   onRemove,
+  onEdit,
   onUse
 }) {
   const cardClass = ["chart-card", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
+  const itemName = displayChartItemName(item);
   return React.createElement("article", {
     className: cardClass,
     draggable: "true",
@@ -2196,28 +2737,51 @@ function ChartItem({
       event.preventDefault();
       event.stopPropagation();
       onDropBefore();
-    }
-  }, React.createElement("div", {
+    },
+    onClick: onEdit
+  }, bulkMode ? React.createElement("label", {
+    className: "card-select",
+    onClick: event => event.stopPropagation()
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: selected,
+    onChange: onSelect,
+    "aria-label": `选择 ${itemName}`
+  })) : null, React.createElement("div", {
     className: "chart-card-main"
-  }, React.createElement("h3", null, item.name), React.createElement("div", {
-    className: "chart-diagram-wrap"
-  }, React.createElement(ChordDiagram, {
-    shape: item.frets,
-    root: item.root,
-    startAtLowestFret: true
-  }))), React.createElement("div", {
+  }, React.createElement("h3", null, "[", itemName, "]"), React.createElement("p", {
+    className: "card-shape-code"
+  }, compactShape(item.frets)), item.note ? React.createElement("p", {
+    className: "card-note"
+  }, item.note) : null), React.createElement("div", {
     className: "chart-card-actions"
   }, React.createElement("button", {
     className: "icon-button",
-    onClick: () => onUse(item.frets),
+    onClick: event => {
+      event.stopPropagation();
+      onEdit();
+    },
+    title: "\u7F16\u8F91"
+  }, "\u7F16\u8F91"), React.createElement("button", {
+    className: "icon-button",
+    onClick: event => {
+      event.stopPropagation();
+      onUse(item.frets);
+    },
     title: "\u5E26\u5165\u8BC6\u522B"
   }, "\u8BC6\u522B"), React.createElement("button", {
     className: "icon-button",
-    onClick: onDuplicate,
+    onClick: event => {
+      event.stopPropagation();
+      onDuplicate();
+    },
     title: "\u590D\u5236\u8FD9\u4E2A\u548C\u5F26"
   }, "\u590D\u5236"), React.createElement("button", {
     className: "icon-button danger-button",
-    onClick: onRemove,
+    onClick: event => {
+      event.stopPropagation();
+      onRemove();
+    },
     title: "\u5220\u9664"
   }, "x")));
 }

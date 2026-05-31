@@ -1,11 +1,12 @@
-# Guitar Chord Finder MVP
+# Guitar Songbook
 
-一个轻量 React MVP：输入和弦名查看多个吉他把位，或输入六根弦的品位识别可能的和弦。
+一个轻量 React 工具：默认是基于六弦按法输入的个人曲谱记录工具，同时保留和弦搜索与反向识别。
 
 ## 运行
 
 ```bash
-/Users/magicbook/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node server.mjs
+npm install
+npm run dev
 ```
 
 然后打开终端显示的本地地址，默认是 `http://localhost:4173`。
@@ -13,7 +14,7 @@
 ## 构建发布版
 
 ```bash
-/Users/magicbook/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node build.mjs
+npm run build
 ```
 
 发布文件会生成在 `dist/`。具体发布步骤见 [DEPLOY.md](./DEPLOY.md)。
@@ -24,8 +25,7 @@
 
 ## 支持
 
+- 曲谱记录：多曲谱、多段落、按法输入、编辑和弦块、拖动排序、批量输入、复制段落、批量选择操作
 - 标准调弦：E A D G B e
-- 和弦查询：C、Am、F#7、Bbmaj7、Dsus4、Cadd9、Bm7b5 等
-- 反向识别：输入 `x` 表示闷音，数字表示品位，例如 `x 3 2 0 1 0`
-# guitar-chord-site
-# guitar-chord-site
+- Chord Tools：和弦查询 C、Am、F#7、Bbmaj7、Dsus4、Cadd9、Bm7b5 等
+- Reverse Finder：点击和弦图输入按法，识别可能和弦
