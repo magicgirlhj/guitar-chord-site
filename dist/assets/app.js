@@ -982,16 +982,6 @@ function rootFromChordName(name) {
   const parsed = parseChordName(String(name).split("/")[0]);
   return parsed.ok ? parsed.root : null;
 }
-function chartItemsToText(title, items) {
-  if (!items.length) return "";
-  const rows = sectionClipboardText(items);
-  return `${title || "未命名曲谱"}\n${rows}`;
-}
-function chartSectionsToText(title, sections) {
-  const populated = sections.filter(section => section.items.length);
-  if (!populated.length) return "";
-  return `${title || "未命名曲谱"}\n${populated.map(section => `\n[${section.title}]\n${sectionClipboardText(section.items)}`).join("\n")}`;
-}
 function flattenSections(sections = []) {
   return (Array.isArray(sections) ? sections : []).flatMap(section => Array.isArray(section?.items) ? section.items : []);
 }
@@ -1047,7 +1037,7 @@ function App() {
   const [openBatchSectionId, setOpenBatchSectionId] = useState("");
   const [batchInput, setBatchInput] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState([]);
-  const [bulkTargetSectionId, setBulkTargetSectionId] = useState("");
+  const [copiedChordItems, setCopiedChordItems] = useState([]);
   const [draggedChord, setDraggedChord] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
@@ -1083,11 +1073,6 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(CHART_STORAGE_KEY, JSON.stringify(chartLibrary));
   }, [chartLibrary]);
-  useEffect(() => {
-    if (!bulkTargetSectionId || !chartSections.some(section => section.id === bulkTargetSectionId)) {
-      setBulkTargetSectionId(activeSection.id);
-    }
-  }, [activeSection.id, bulkTargetSectionId, chartSections]);
   useEffect(() => {
     const validIds = new Set(chartSections.flatMap(section => section.items.map(item => item.id)));
     setSelectedItemIds(ids => ids.filter(id => validIds.has(id)));
@@ -1467,40 +1452,6 @@ function App() {
     setOpenBatchSectionId("");
     setChartMessage(errors.length ? `已加入 ${parsed.length} 个和弦；有 ${errors.length} 行未解析。` : `已批量加入 ${parsed.length} 个和弦。`);
   }
-  async function copySection(section) {
-    const text = sectionClipboardText(section.items);
-    if (!text) {
-      setChartMessage("这个段落还是空的。");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setChartMessage(`已复制「${section.title}」。`);
-    } catch {
-      setChartMessage(text);
-    }
-  }
-  function duplicateSection(sectionId) {
-    updateActiveChart(chart => {
-      const source = chart.sections.find(section => section.id === sectionId);
-      if (!source) return {};
-      const copy = {
-        ...source,
-        id: createId("section"),
-        title: `${source.title} 复制`,
-        items: source.items.map(item => ({
-          ...item,
-          id: createId("chord"),
-          source: `${item.source || "曲谱记录"} · 复制`
-        }))
-      };
-      return {
-        activeSectionId: copy.id,
-        sections: [...chart.sections, copy]
-      };
-    });
-    setChartMessage("已复制段落。");
-  }
   function clearSection(sectionId) {
     updateChartSections(sections => sections.map(section => section.id === sectionId ? {
       ...section,
@@ -1512,9 +1463,15 @@ function App() {
   function toggleSelectedItem(itemId) {
     setSelectedItemIds(ids => ids.includes(itemId) ? ids.filter(id => id !== itemId) : [...ids, itemId]);
   }
+  function chartItemEntriesByIds(itemIds) {
+    const selected = new Set(itemIds);
+    return chartSections.flatMap(section => section.items.filter(item => selected.has(item.id)).map(item => ({
+      sectionId: section.id,
+      item
+    })));
+  }
   function selectedItemsInChart() {
-    const selected = new Set(selectedItemIds);
-    return chartSections.flatMap(section => section.items.filter(item => selected.has(item.id)));
+    return chartItemEntriesByIds(selectedItemIds).map(entry => entry.item);
   }
   async function copySelectedItems() {
     const items = selectedItemsInChart();
@@ -1523,12 +1480,43 @@ function App() {
       return;
     }
     const text = sectionClipboardText(items);
+    setCopiedChordItems(items.map(item => ({
+      ...item
+    })));
     try {
       await navigator.clipboard.writeText(text);
-      setChartMessage(`已复制 ${items.length} 个和弦。`);
+      setChartMessage(`已复制 ${items.length} 个和弦，可以粘贴到任意段落。`);
     } catch {
       setChartMessage(text);
     }
+  }
+  function pasteCopiedItems(sectionId, index) {
+    if (!copiedChordItems.length) {
+      setChartMessage("请先选择和弦并点击复制。");
+      return;
+    }
+    const pastedItems = copiedChordItems.map(item => ({
+      ...item,
+      id: createId("chord"),
+      source: `${item.source || "曲谱记录"} · 粘贴`
+    }));
+    updateChartSections(sections => sections.map(section => {
+      if (section.id !== sectionId) return section;
+      const insertIndex = Math.max(0, Math.min(index, section.items.length));
+      const items = [...section.items];
+      items.splice(insertIndex, 0, ...pastedItems);
+      return {
+        ...section,
+        items
+      };
+    }));
+    selectSection(sectionId);
+    setSelectedItemIds(pastedItems.map(item => item.id));
+    setChartMessage(`已粘贴 ${pastedItems.length} 个和弦。`);
+  }
+  function clearSelectedItems() {
+    setSelectedItemIds([]);
+    setChartMessage("已取消选择。");
   }
   function deleteSelectedItems() {
     if (!selectedItemIds.length) {
@@ -1542,43 +1530,6 @@ function App() {
     })));
     setSelectedItemIds([]);
     setChartMessage("已删除选中的和弦。");
-  }
-  function transferSelectedItems(copy = false) {
-    const targetSectionId = bulkTargetSectionId || activeSection.id;
-    const selected = new Set(selectedItemIds);
-    const movingItems = selectedItemsInChart();
-    if (!movingItems.length) {
-      setChartMessage("请先选择和弦。");
-      return;
-    }
-    updateChartSections(sections => sections.map(section => {
-      const baseItems = copy ? section.items : section.items.filter(item => !selected.has(item.id));
-      const items = section.id === targetSectionId ? [...baseItems, ...movingItems.map(item => copy ? {
-        ...item,
-        id: createId("chord"),
-        source: `${item.source || "曲谱记录"} · 复制`
-      } : item)] : baseItems;
-      return {
-        ...section,
-        items
-      };
-    }));
-    if (!copy) setSelectedItemIds([]);
-    setChartMessage(`${copy ? "已复制" : "已移动"} ${movingItems.length} 个和弦。`);
-  }
-  function moveChartItem(id, direction) {
-    setChartItems(items => {
-      const index = items.findIndex(item => item.id === id);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return items;
-      const next = [...items];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
-  }
-  function removeChartItem(id) {
-    setChartItems(items => items.filter(item => item.id !== id));
   }
   function createSection() {
     const section = createEmptySection(`段落 ${chartSections.length + 1}`);
@@ -1621,52 +1572,35 @@ function App() {
     });
     setChartMessage("已删除段落。");
   }
-  function removeSectionItem(sectionId, itemId) {
-    updateChartSections(sections => sections.map(section => section.id === sectionId ? {
-      ...section,
-      items: section.items.filter(item => item.id !== itemId)
-    } : section));
-  }
-  function duplicateSectionItem(sectionId, itemId) {
-    updateChartSections(sections => sections.map(section => {
-      if (section.id !== sectionId) return section;
-      const index = section.items.findIndex(item => item.id === itemId);
-      if (index < 0) return section;
-      const copy = {
-        ...section.items[index],
-        id: createId("chord"),
-        source: `${section.items[index].source || "曲谱记录"} · 复制`
-      };
-      const items = [...section.items];
-      items.splice(index + 1, 0, copy);
-      return {
-        ...section,
-        items
-      };
-    }));
-    setChartMessage("已复制和弦卡片。");
-  }
-  function moveChartItemToSection(itemId, fromSectionId, toSectionId, toIndex) {
+  function moveChartItemsToSection(itemIds, toSectionId, toIndex) {
+    const movingIds = [...new Set(itemIds)];
+    if (!movingIds.length) return;
     updateChartSections(sections => {
-      let movingItem = null;
-      let fromIndex = -1;
-      const withoutItem = sections.map(section => {
-        if (section.id !== fromSectionId) return section;
-        fromIndex = section.items.findIndex(item => item.id === itemId);
-        if (fromIndex < 0) return section;
-        movingItem = section.items[fromIndex];
+      const movingIdSet = new Set(movingIds);
+      const targetSection = sections.find(section => section.id === toSectionId);
+      const removedBeforeTarget = targetSection ? targetSection.items.slice(0, toIndex).filter(item => movingIdSet.has(item.id)).length : 0;
+      const movingItems = [];
+      const sectionsWithoutMovingItems = sections.map(section => {
+        const items = [];
+        section.items.forEach(item => {
+          if (movingIdSet.has(item.id)) {
+            movingItems.push(item);
+          } else {
+            items.push(item);
+          }
+        });
         return {
           ...section,
-          items: section.items.filter(item => item.id !== itemId)
+          items
         };
       });
-      if (!movingItem) return sections;
-      return withoutItem.map(section => {
+      if (!movingItems.length) return sections;
+      return sectionsWithoutMovingItems.map(section => {
         if (section.id !== toSectionId) return section;
-        const adjustedIndex = fromSectionId === toSectionId && fromIndex >= 0 && fromIndex < toIndex ? toIndex - 1 : toIndex;
+        const adjustedIndex = toIndex - removedBeforeTarget;
         const insertIndex = Math.max(0, Math.min(adjustedIndex, section.items.length));
         const items = [...section.items];
-        items.splice(insertIndex, 0, movingItem);
+        items.splice(insertIndex, 0, ...movingItems);
         return {
           ...section,
           items
@@ -1690,7 +1624,9 @@ function App() {
       setDragTarget(null);
       return;
     }
-    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    moveChartItemsToSection(draggedChord.itemIds, sectionId, index);
+    setSelectedItemIds(draggedChord.itemIds);
+    selectSection(sectionId);
     clearChartDrag();
   }
   function setStringValue(index, value) {
@@ -1708,19 +1644,6 @@ function App() {
     const parsed = frets.map(parseFret);
     const stats = shapeStats(parsed);
     setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
-  }
-  async function copyChart() {
-    const text = chartSectionsToText(chartTitle, chartSections);
-    if (!text) {
-      setChartMessage("曲谱还是空的。");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setChartMessage("已复制曲谱文本。");
-    } catch {
-      setChartMessage(text);
-    }
   }
   function exportChart() {
     if (!chartItems.length) {
@@ -2135,9 +2058,6 @@ function App() {
     onClick: createSection
   }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("button", {
     className: "ghost-button",
-    onClick: copyChart
-  }, "\u590D\u5236\u6574\u9996"), React.createElement("button", {
-    className: "ghost-button",
     onClick: exportChart
   }, "\u5BFC\u51FA"), React.createElement("button", {
     className: "ghost-button",
@@ -2288,24 +2208,15 @@ function App() {
   }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
     className: "ghost-button",
     onClick: copySelectedItems
-  }, "\u590D\u5236\u9009\u4E2D"), React.createElement("button", {
+  }, "\u590D\u5236"), React.createElement("button", {
     className: "ghost-button danger-button",
     onClick: deleteSelectedItems
-  }, "\u5220\u9664\u9009\u4E2D"), React.createElement("select", {
-    className: "chart-select compact-select",
-    value: bulkTargetSectionId,
-    onChange: event => setBulkTargetSectionId(event.target.value),
-    "aria-label": "\u6279\u91CF\u64CD\u4F5C\u76EE\u6807\u6BB5\u843D"
-  }, chartSections.map(section => React.createElement("option", {
-    value: section.id,
-    key: section.id
-  }, section.title))), React.createElement("button", {
+  }, "\u5220\u9664"), React.createElement("button", {
     className: "ghost-button",
-    onClick: () => transferSelectedItems(false)
-  }, "\u79FB\u52A8\u5230\u6BB5\u843D"), React.createElement("button", {
-    className: "ghost-button",
-    onClick: () => transferSelectedItems(true)
-  }, "\u590D\u5236\u5230\u6BB5\u843D")) : null, React.createElement("div", {
+    onClick: clearSelectedItems
+  }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
+    className: "clipboard-status"
+  }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A\uFF0C\u53EF\u7C98\u8D34") : null) : null, React.createElement("div", {
     className: "chart-sections",
     "aria-label": "\u66F2\u8C31\u6BB5\u843D"
   }, chartSections.map(section => React.createElement(ChartSection, {
@@ -2315,10 +2226,10 @@ function App() {
     onSelect: () => selectSection(section.id),
     onRename: title => renameSection(section.id, title),
     onDelete: () => deleteSection(section.id),
-    onDuplicate: () => duplicateSection(section.id),
     onClear: () => clearSection(section.id),
-    onCopy: () => copySection(section),
     onAddChord: () => openNewChordEditor(section.id),
+    canPaste: Boolean(copiedChordItems.length),
+    onPasteAt: index => pasteCopiedItems(section.id, index),
     batchOpen: openBatchSectionId === section.id,
     batchInput: batchInput,
     onToggleBatch: () => {
@@ -2365,21 +2276,26 @@ function App() {
     key: item.id,
     selected: selectedItemIds.includes(item.id),
     onSelect: () => toggleSelectedItem(item.id),
-    isDragging: draggedChord?.itemId === item.id,
-    isDropTarget: draggedChord?.itemId !== item.id && dragTarget?.sectionId === section.id && dragTarget?.index === index,
+    canPaste: Boolean(copiedChordItems.length),
+    isDragging: draggedChord?.itemIds?.includes(item.id),
+    isDropTarget: !draggedChord?.itemIds?.includes(item.id) && dragTarget?.sectionId === section.id && dragTarget?.index === index,
+    onPasteBefore: () => pasteCopiedItems(section.id, index),
     onDragStart: () => {
+      const itemIsSelected = selectedItemIds.includes(item.id);
+      const itemIds = itemIsSelected ? selectedItemIds : [item.id];
       selectSection(section.id);
+      if (!itemIsSelected) {
+        setSelectedItemIds([item.id]);
+      }
       setDraggedChord({
-        sectionId: section.id,
-        itemId: item.id
+        itemIds,
+        primaryItemId: item.id
       });
       setDragTarget(null);
     },
     onDragOverBefore: () => markChartDropTarget(section.id, index),
     onDragEnd: clearChartDrag,
     onDropBefore: () => handleChartDrop(section.id, index),
-    onDuplicate: () => duplicateSectionItem(section.id, item.id),
-    onRemove: () => removeSectionItem(section.id, item.id),
     onEdit: () => openEditChordEditor(section.id, item)
   }))))), chartMessage ? React.createElement("p", {
     className: "chart-message"
@@ -2589,10 +2505,10 @@ function ChartSection({
   onSelect,
   onRename,
   onDelete,
-  onDuplicate,
   onClear,
-  onCopy,
   onAddChord,
+  canPaste,
+  onPasteAt,
   batchOpen,
   batchInput,
   onToggleBatch,
@@ -2641,19 +2557,13 @@ function ChartSection({
       event.stopPropagation();
       onToggleBatch();
     }
-  }, "\u6279\u91CF\u8F93\u5165"), React.createElement("button", {
-    className: "ghost-button",
+  }, "\u6279\u91CF\u8F93\u5165"), canPaste ? React.createElement("button", {
+    className: "ghost-button paste-button",
     onClick: event => {
       event.stopPropagation();
-      onCopy();
+      onPasteAt(section.items.length);
     }
-  }, "\u590D\u5236\u6BB5\u843D"), React.createElement("button", {
-    className: "ghost-button",
-    onClick: event => {
-      event.stopPropagation();
-      onDuplicate();
-    }
-  }, "\u590D\u5236"), React.createElement("button", {
+  }, "\u7C98\u8D34\u5230\u672B\u5C3E") : null, React.createElement("button", {
     className: "ghost-button danger-button",
     onClick: event => {
       event.stopPropagation();
@@ -2687,20 +2597,26 @@ function ChartSection({
     className: sequenceClass
   }, section.items.length ? children : React.createElement("div", {
     className: "section-empty"
-  }, "\u70B9\u201C+ \u6309\u6CD5\u201D\u6216\u201C\u6279\u91CF\u8F93\u5165\u201D\u5F00\u59CB\u8BB0\u5F55\u8FD9\u4E2A\u6BB5\u843D\u3002")));
+  }, React.createElement("span", null, "\u70B9\u201C+ \u6309\u6CD5\u201D\u6216\u201C\u6279\u91CF\u8F93\u5165\u201D\u5F00\u59CB\u8BB0\u5F55\u8FD9\u4E2A\u6BB5\u843D\u3002"), canPaste ? React.createElement("button", {
+    className: "ghost-button paste-button",
+    onClick: event => {
+      event.stopPropagation();
+      onPasteAt(0);
+    }
+  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null)));
 }
 function ChartItem({
   item,
   selected,
   onSelect,
+  canPaste,
   isDragging,
   isDropTarget,
+  onPasteBefore,
   onDragStart,
   onDragOverBefore,
   onDragEnd,
   onDropBefore,
-  onDuplicate,
-  onRemove,
   onEdit
 }) {
   const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
@@ -2730,7 +2646,13 @@ function ChartItem({
       onDropBefore();
     },
     onClick: onEdit
-  }, React.createElement("button", {
+  }, canPaste ? React.createElement("button", {
+    className: "paste-before-button",
+    onClick: event => {
+      event.stopPropagation();
+      onPasteBefore();
+    }
+  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, React.createElement("button", {
     className: selected ? "card-select-circle selected-select-circle" : "card-select-circle",
     onClick: event => {
       event.stopPropagation();
@@ -2746,7 +2668,8 @@ function ChartItem({
   }, React.createElement(ChordDiagram, {
     shape: item.frets,
     root: item.root,
-    startAtLowestFret: true
+    startAtLowestFret: true,
+    showFretNumbers: false
   })), item.note ? React.createElement("p", {
     className: "card-note"
   }, item.note) : null));
@@ -2785,7 +2708,8 @@ function VoicingCard({
 function ChordDiagram({
   shape,
   root,
-  startAtLowestFret = false
+  startAtLowestFret = false,
+  showFretNumbers = true
 }) {
   const played = shape.filter(fret => fret !== null);
   const positive = played.filter(fret => fret > 0);
@@ -2864,11 +2788,11 @@ function ChordDiagram({
       cx: x,
       cy: y,
       r: "11.5"
-    }), React.createElement("text", {
+    }), showFretNumbers ? React.createElement("text", {
       className: "diagram-text",
       x: x,
       y: y + 0.5
-    }, fret));
+    }, fret) : null);
   }), TUNING.map((string, index) => {
     const x = left + stringGap * index;
     return React.createElement("text", {

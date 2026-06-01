@@ -931,27 +931,6 @@ function rootFromChordName(name) {
   return parsed.ok ? parsed.root : null;
 }
 
-function chartItemsToText(title, items) {
-  if (!items.length) return "";
-
-  const rows = sectionClipboardText(items);
-
-  return `${title || "未命名曲谱"}\n${rows}`;
-}
-
-function chartSectionsToText(title, sections) {
-  const populated = sections.filter((section) => section.items.length);
-
-  if (!populated.length) return "";
-
-  return `${title || "未命名曲谱"}\n${populated
-    .map(
-      (section) =>
-        `\n[${section.title}]\n${sectionClipboardText(section.items)}`
-    )
-    .join("\n")}`;
-}
-
 function flattenSections(sections = []) {
   return (Array.isArray(sections) ? sections : []).flatMap((section) =>
     Array.isArray(section?.items) ? section.items : []
@@ -1012,7 +991,7 @@ function App() {
   const [openBatchSectionId, setOpenBatchSectionId] = useState("");
   const [batchInput, setBatchInput] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState([]);
-  const [bulkTargetSectionId, setBulkTargetSectionId] = useState("");
+  const [copiedChordItems, setCopiedChordItems] = useState([]);
   const [draggedChord, setDraggedChord] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
@@ -1053,12 +1032,6 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(CHART_STORAGE_KEY, JSON.stringify(chartLibrary));
   }, [chartLibrary]);
-
-  useEffect(() => {
-    if (!bulkTargetSectionId || !chartSections.some((section) => section.id === bulkTargetSectionId)) {
-      setBulkTargetSectionId(activeSection.id);
-    }
-  }, [activeSection.id, bulkTargetSectionId, chartSections]);
 
   useEffect(() => {
     const validIds = new Set(chartSections.flatMap((section) => section.items.map((item) => item.id)));
@@ -1455,42 +1428,6 @@ function App() {
     );
   }
 
-  async function copySection(section) {
-    const text = sectionClipboardText(section.items);
-
-    if (!text) {
-      setChartMessage("这个段落还是空的。");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setChartMessage(`已复制「${section.title}」。`);
-    } catch {
-      setChartMessage(text);
-    }
-  }
-
-  function duplicateSection(sectionId) {
-    updateActiveChart((chart) => {
-      const source = chart.sections.find((section) => section.id === sectionId);
-      if (!source) return {};
-
-      const copy = {
-        ...source,
-        id: createId("section"),
-        title: `${source.title} 复制`,
-        items: source.items.map((item) => ({ ...item, id: createId("chord"), source: `${item.source || "曲谱记录"} · 复制` })),
-      };
-
-      return {
-        activeSectionId: copy.id,
-        sections: [...chart.sections, copy],
-      };
-    });
-    setChartMessage("已复制段落。");
-  }
-
   function clearSection(sectionId) {
     updateChartSections((sections) =>
       sections.map((section) => (section.id === sectionId ? { ...section, items: [] } : section))
@@ -1503,9 +1440,17 @@ function App() {
     setSelectedItemIds((ids) => (ids.includes(itemId) ? ids.filter((id) => id !== itemId) : [...ids, itemId]));
   }
 
+  function chartItemEntriesByIds(itemIds) {
+    const selected = new Set(itemIds);
+    return chartSections.flatMap((section) =>
+      section.items
+        .filter((item) => selected.has(item.id))
+        .map((item) => ({ sectionId: section.id, item }))
+    );
+  }
+
   function selectedItemsInChart() {
-    const selected = new Set(selectedItemIds);
-    return chartSections.flatMap((section) => section.items.filter((item) => selected.has(item.id)));
+    return chartItemEntriesByIds(selectedItemIds).map((entry) => entry.item);
   }
 
   async function copySelectedItems() {
@@ -1517,12 +1462,46 @@ function App() {
     }
 
     const text = sectionClipboardText(items);
+    setCopiedChordItems(items.map((item) => ({ ...item })));
     try {
       await navigator.clipboard.writeText(text);
-      setChartMessage(`已复制 ${items.length} 个和弦。`);
+      setChartMessage(`已复制 ${items.length} 个和弦，可以粘贴到任意段落。`);
     } catch {
       setChartMessage(text);
     }
+  }
+
+  function pasteCopiedItems(sectionId, index) {
+    if (!copiedChordItems.length) {
+      setChartMessage("请先选择和弦并点击复制。");
+      return;
+    }
+
+    const pastedItems = copiedChordItems.map((item) => ({
+      ...item,
+      id: createId("chord"),
+      source: `${item.source || "曲谱记录"} · 粘贴`,
+    }));
+
+    updateChartSections((sections) =>
+      sections.map((section) => {
+        if (section.id !== sectionId) return section;
+
+        const insertIndex = Math.max(0, Math.min(index, section.items.length));
+        const items = [...section.items];
+        items.splice(insertIndex, 0, ...pastedItems);
+        return { ...section, items };
+      })
+    );
+
+    selectSection(sectionId);
+    setSelectedItemIds(pastedItems.map((item) => item.id));
+    setChartMessage(`已粘贴 ${pastedItems.length} 个和弦。`);
+  }
+
+  function clearSelectedItems() {
+    setSelectedItemIds([]);
+    setChartMessage("已取消选择。");
   }
 
   function deleteSelectedItems() {
@@ -1537,54 +1516,6 @@ function App() {
     );
     setSelectedItemIds([]);
     setChartMessage("已删除选中的和弦。");
-  }
-
-  function transferSelectedItems(copy = false) {
-    const targetSectionId = bulkTargetSectionId || activeSection.id;
-    const selected = new Set(selectedItemIds);
-    const movingItems = selectedItemsInChart();
-
-    if (!movingItems.length) {
-      setChartMessage("请先选择和弦。");
-      return;
-    }
-
-    updateChartSections((sections) =>
-      sections.map((section) => {
-        const baseItems = copy ? section.items : section.items.filter((item) => !selected.has(item.id));
-        const items =
-          section.id === targetSectionId
-            ? [
-                ...baseItems,
-                ...movingItems.map((item) =>
-                  copy ? { ...item, id: createId("chord"), source: `${item.source || "曲谱记录"} · 复制` } : item
-                ),
-              ]
-            : baseItems;
-        return { ...section, items };
-      })
-    );
-
-    if (!copy) setSelectedItemIds([]);
-    setChartMessage(`${copy ? "已复制" : "已移动"} ${movingItems.length} 个和弦。`);
-  }
-
-  function moveChartItem(id, direction) {
-    setChartItems((items) => {
-      const index = items.findIndex((item) => item.id === id);
-      const nextIndex = index + direction;
-
-      if (index < 0 || nextIndex < 0 || nextIndex >= items.length) return items;
-
-      const next = [...items];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
-  }
-
-  function removeChartItem(id) {
-    setChartItems((items) => items.filter((item) => item.id !== id));
   }
 
   function createSection() {
@@ -1628,61 +1559,41 @@ function App() {
     setChartMessage("已删除段落。");
   }
 
-  function removeSectionItem(sectionId, itemId) {
-    updateChartSections((sections) =>
-      sections.map((section) =>
-        section.id === sectionId
-          ? { ...section, items: section.items.filter((item) => item.id !== itemId) }
-          : section
-      )
-    );
-  }
+  function moveChartItemsToSection(itemIds, toSectionId, toIndex) {
+    const movingIds = [...new Set(itemIds)];
 
-  function duplicateSectionItem(sectionId, itemId) {
-    updateChartSections((sections) =>
-      sections.map((section) => {
-        if (section.id !== sectionId) return section;
+    if (!movingIds.length) return;
 
-        const index = section.items.findIndex((item) => item.id === itemId);
-        if (index < 0) return section;
-
-        const copy = {
-          ...section.items[index],
-          id: createId("chord"),
-          source: `${section.items[index].source || "曲谱记录"} · 复制`,
-        };
-        const items = [...section.items];
-        items.splice(index + 1, 0, copy);
-        return { ...section, items };
-      })
-    );
-    setChartMessage("已复制和弦卡片。");
-  }
-
-  function moveChartItemToSection(itemId, fromSectionId, toSectionId, toIndex) {
     updateChartSections((sections) => {
-      let movingItem = null;
-      let fromIndex = -1;
-      const withoutItem = sections.map((section) => {
-        if (section.id !== fromSectionId) return section;
+      const movingIdSet = new Set(movingIds);
+      const targetSection = sections.find((section) => section.id === toSectionId);
+      const removedBeforeTarget = targetSection
+        ? targetSection.items.slice(0, toIndex).filter((item) => movingIdSet.has(item.id)).length
+        : 0;
+      const movingItems = [];
+      const sectionsWithoutMovingItems = sections.map((section) => {
+        const items = [];
 
-        fromIndex = section.items.findIndex((item) => item.id === itemId);
-        if (fromIndex < 0) return section;
+        section.items.forEach((item) => {
+          if (movingIdSet.has(item.id)) {
+            movingItems.push(item);
+          } else {
+            items.push(item);
+          }
+        });
 
-        movingItem = section.items[fromIndex];
-        return { ...section, items: section.items.filter((item) => item.id !== itemId) };
+        return { ...section, items };
       });
 
-      if (!movingItem) return sections;
+      if (!movingItems.length) return sections;
 
-      return withoutItem.map((section) => {
+      return sectionsWithoutMovingItems.map((section) => {
         if (section.id !== toSectionId) return section;
 
-        const adjustedIndex =
-          fromSectionId === toSectionId && fromIndex >= 0 && fromIndex < toIndex ? toIndex - 1 : toIndex;
+        const adjustedIndex = toIndex - removedBeforeTarget;
         const insertIndex = Math.max(0, Math.min(adjustedIndex, section.items.length));
         const items = [...section.items];
-        items.splice(insertIndex, 0, movingItem);
+        items.splice(insertIndex, 0, ...movingItems);
         return { ...section, items };
       });
     });
@@ -1707,7 +1618,9 @@ function App() {
       return;
     }
 
-    moveChartItemToSection(draggedChord.itemId, draggedChord.sectionId, sectionId, index);
+    moveChartItemsToSection(draggedChord.itemIds, sectionId, index);
+    setSelectedItemIds(draggedChord.itemIds);
+    selectSection(sectionId);
     clearChartDrag();
   }
 
@@ -1728,22 +1641,6 @@ function App() {
     const parsed = frets.map(parseFret);
     const stats = shapeStats(parsed);
     setEditorBaseFret(stats.isOpen || stats.startFret <= 1 ? 1 : stats.startFret);
-  }
-
-  async function copyChart() {
-    const text = chartSectionsToText(chartTitle, chartSections);
-
-    if (!text) {
-      setChartMessage("曲谱还是空的。");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setChartMessage("已复制曲谱文本。");
-    } catch {
-      setChartMessage(text);
-    }
   }
 
   function exportChart() {
@@ -2161,9 +2058,6 @@ function App() {
                 <button className="ghost-button add-button" onClick={createSection}>
                   添加段落
                 </button>
-                <button className="ghost-button" onClick={copyChart}>
-                  复制整首
-                </button>
                 <button className="ghost-button" onClick={exportChart}>
                   导出
                 </button>
@@ -2356,29 +2250,15 @@ function App() {
               <div className="bulk-toolbar">
                 <strong>已选 {selectedItemIds.length} 个</strong>
                 <button className="ghost-button" onClick={copySelectedItems}>
-                  复制选中
+                  复制
                 </button>
                 <button className="ghost-button danger-button" onClick={deleteSelectedItems}>
-                  删除选中
+                  删除
                 </button>
-                <select
-                  className="chart-select compact-select"
-                  value={bulkTargetSectionId}
-                  onChange={(event) => setBulkTargetSectionId(event.target.value)}
-                  aria-label="批量操作目标段落"
-                >
-                  {chartSections.map((section) => (
-                    <option value={section.id} key={section.id}>
-                      {section.title}
-                    </option>
-                  ))}
-                </select>
-                <button className="ghost-button" onClick={() => transferSelectedItems(false)}>
-                  移动到段落
+                <button className="ghost-button" onClick={clearSelectedItems}>
+                  取消选择
                 </button>
-                <button className="ghost-button" onClick={() => transferSelectedItems(true)}>
-                  复制到段落
-                </button>
+                {copiedChordItems.length ? <span className="clipboard-status">已复制 {copiedChordItems.length} 个，可粘贴</span> : null}
               </div>
             ) : null}
 
@@ -2391,10 +2271,10 @@ function App() {
                   onSelect={() => selectSection(section.id)}
                   onRename={(title) => renameSection(section.id, title)}
                   onDelete={() => deleteSection(section.id)}
-                  onDuplicate={() => duplicateSection(section.id)}
                   onClear={() => clearSection(section.id)}
-                  onCopy={() => copySection(section)}
                   onAddChord={() => openNewChordEditor(section.id)}
+                  canPaste={Boolean(copiedChordItems.length)}
+                  onPasteAt={(index) => pasteCopiedItems(section.id, index)}
                   batchOpen={openBatchSectionId === section.id}
                   batchInput={batchInput}
                   onToggleBatch={() => {
@@ -2441,22 +2321,27 @@ function App() {
                       key={item.id}
                       selected={selectedItemIds.includes(item.id)}
                       onSelect={() => toggleSelectedItem(item.id)}
-                      isDragging={draggedChord?.itemId === item.id}
+                      canPaste={Boolean(copiedChordItems.length)}
+                      isDragging={draggedChord?.itemIds?.includes(item.id)}
                       isDropTarget={
-                        draggedChord?.itemId !== item.id &&
+                        !draggedChord?.itemIds?.includes(item.id) &&
                         dragTarget?.sectionId === section.id &&
                         dragTarget?.index === index
                       }
+                      onPasteBefore={() => pasteCopiedItems(section.id, index)}
                       onDragStart={() => {
+                        const itemIsSelected = selectedItemIds.includes(item.id);
+                        const itemIds = itemIsSelected ? selectedItemIds : [item.id];
                         selectSection(section.id);
-                        setDraggedChord({ sectionId: section.id, itemId: item.id });
+                        if (!itemIsSelected) {
+                          setSelectedItemIds([item.id]);
+                        }
+                        setDraggedChord({ itemIds, primaryItemId: item.id });
                         setDragTarget(null);
                       }}
                       onDragOverBefore={() => markChartDropTarget(section.id, index)}
                       onDragEnd={clearChartDrag}
                       onDropBefore={() => handleChartDrop(section.id, index)}
-                      onDuplicate={() => duplicateSectionItem(section.id, item.id)}
-                      onRemove={() => removeSectionItem(section.id, item.id)}
                       onEdit={() => openEditChordEditor(section.id, item)}
                     />
                   ))}
@@ -2709,10 +2594,10 @@ function ChartSection({
   onSelect,
   onRename,
   onDelete,
-  onDuplicate,
   onClear,
-  onCopy,
   onAddChord,
+  canPaste,
+  onPasteAt,
   batchOpen,
   batchInput,
   onToggleBatch,
@@ -2785,24 +2670,17 @@ function ChartSection({
           >
             批量输入
           </button>
-          <button
-            className="ghost-button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onCopy();
-            }}
-          >
-            复制段落
-          </button>
-          <button
-            className="ghost-button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDuplicate();
-            }}
-          >
-            复制
-          </button>
+          {canPaste ? (
+            <button
+              className="ghost-button paste-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onPasteAt(section.items.length);
+              }}
+            >
+              粘贴到末尾
+            </button>
+          ) : null}
           <button
             className="ghost-button danger-button"
             onClick={(event) => {
@@ -2848,7 +2726,24 @@ function ChartSection({
       ) : null}
 
       <div className={sequenceClass}>
-        {section.items.length ? children : <div className="section-empty">点“+ 按法”或“批量输入”开始记录这个段落。</div>}
+        {section.items.length ? (
+          children
+        ) : (
+          <div className="section-empty">
+            <span>点“+ 按法”或“批量输入”开始记录这个段落。</span>
+            {canPaste ? (
+              <button
+                className="ghost-button paste-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPasteAt(0);
+                }}
+              >
+                粘贴到这里
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -2858,14 +2753,14 @@ function ChartItem({
   item,
   selected,
   onSelect,
+  canPaste,
   isDragging,
   isDropTarget,
+  onPasteBefore,
   onDragStart,
   onDragOverBefore,
   onDragEnd,
   onDropBefore,
-  onDuplicate,
-  onRemove,
   onEdit,
 }) {
   const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""]
@@ -2900,6 +2795,17 @@ function ChartItem({
       }}
       onClick={onEdit}
     >
+      {canPaste ? (
+        <button
+          className="paste-before-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPasteBefore();
+          }}
+        >
+          粘贴到这里
+        </button>
+      ) : null}
       <button
         className={selected ? "card-select-circle selected-select-circle" : "card-select-circle"}
         onClick={(event) => {
@@ -2913,7 +2819,7 @@ function ChartItem({
       <div className="chart-card-main">
         <h3>[{itemName}]</h3>
         <div className="chart-diagram-wrap">
-          <ChordDiagram shape={item.frets} root={item.root} startAtLowestFret />
+          <ChordDiagram shape={item.frets} root={item.root} startAtLowestFret showFretNumbers={false} />
         </div>
         {item.note ? <p className="card-note">{item.note}</p> : null}
       </div>
@@ -2948,7 +2854,7 @@ function VoicingCard({ parsed, shape, onUse, onAdd }) {
   );
 }
 
-function ChordDiagram({ shape, root, startAtLowestFret = false }) {
+function ChordDiagram({ shape, root, startAtLowestFret = false, showFretNumbers = true }) {
   const played = shape.filter((fret) => fret !== null);
   const positive = played.filter((fret) => fret > 0);
   const minPositive = positive.length ? Math.min(...positive) : 1;
@@ -3032,9 +2938,11 @@ function ChordDiagram({ shape, root, startAtLowestFret = false }) {
         return (
           <g key={`dot-${index}-${fret}`}>
             <circle className={isRoot ? "diagram-root" : "diagram-dot"} cx={x} cy={y} r="11.5" />
-            <text className="diagram-text" x={x} y={y + 0.5}>
-              {fret}
-            </text>
+            {showFretNumbers ? (
+              <text className="diagram-text" x={x} y={y + 0.5}>
+                {fret}
+              </text>
+            ) : null}
           </g>
         );
       })}

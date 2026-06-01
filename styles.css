@@ -151,7 +151,7 @@ h1 {
 }
 
 .hidden-tab-panel {
-  display: none;
+  display: none !important;
 }
 
 .lookup-row {
@@ -715,6 +715,18 @@ h2 {
   font-size: 0.9rem;
 }
 
+.clipboard-status {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.paste-button {
+  border-color: #171512;
+  background: #171512;
+  color: #fffdf8;
+}
+
 .compact-select {
   width: min(100%, 220px);
   min-height: 36px;
@@ -1228,6 +1240,9 @@ h2 {
 }
 
 .section-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
   grid-column: 1 / -1;
   padding: 14px;
   border: 2px dashed #b9ad9d;
@@ -1307,6 +1322,34 @@ h2 {
   align-items: start;
 }
 
+.paste-before-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  min-height: 28px;
+  border: 2px solid #171512;
+  border-radius: 999px;
+  background: #171512;
+  color: #fffdf8;
+  padding: 0 9px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.chart-card:hover .paste-before-button,
+.chart-card:focus-within .paste-before-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .card-select-circle {
   position: absolute;
   top: 8px;
@@ -1357,6 +1400,7 @@ h2 {
 .chart-card h3 {
   min-height: 22px;
   padding-left: 28px;
+  padding-right: 76px;
   overflow: hidden;
   font-size: 0.98rem;
   font-weight: 900;
@@ -1568,6 +1612,12 @@ h2 {
   .card-select-circle {
     opacity: 1;
     transform: scale(1);
+  }
+
+  .paste-before-button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 
   .section-chord-editor-panel .chord-editor-layout {
