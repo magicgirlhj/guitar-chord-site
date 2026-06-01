@@ -1028,6 +1028,9 @@ function parseShapeLine(line) {
 function sectionClipboardText(items = []) {
   return items.map(item => `${displayChartItemName(item)}: ${compactShapeCode(item.frets)}`).join("\n");
 }
+function isEditableTarget(target) {
+  return Boolean(target?.closest?.("input, textarea, select, [contenteditable='true']"));
+}
 function App() {
   const [activeTab, setActiveTab] = useState("songbook");
   const [chordQuery, setChordQuery] = useState("C");
@@ -1038,6 +1041,8 @@ function App() {
   const [batchInput, setBatchInput] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [copiedChordItems, setCopiedChordItems] = useState([]);
+  const [copiedChordText, setCopiedChordText] = useState("");
+  const [pasteTarget, setPasteTarget] = useState(null);
   const [draggedChord, setDraggedChord] = useState(null);
   const [dragTarget, setDragTarget] = useState(null);
   const [chartLibrary, setChartLibrary] = useState(loadChartLibrary);
@@ -1077,6 +1082,46 @@ function App() {
     const validIds = new Set(chartSections.flatMap(section => section.items.map(item => item.id)));
     setSelectedItemIds(ids => ids.filter(id => validIds.has(id)));
   }, [chartSections]);
+  useEffect(() => {
+    setPasteTarget(target => {
+      if (!chartSections.length) return null;
+      const fallback = {
+        sectionId: activeSection.id,
+        index: activeSection.items.length
+      };
+      if (!target) return fallback;
+      const section = chartSections.find(item => item.id === target.sectionId);
+      if (!section) return fallback;
+      const index = Math.max(0, Math.min(target.index, section.items.length));
+      return target.index === index ? target : {
+        ...target,
+        index
+      };
+    });
+  }, [activeSection.id, activeSection.items.length, chartSections]);
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const key = event.key.toLowerCase();
+      const isShortcut = event.metaKey || event.ctrlKey;
+      if (activeTab !== "songbook" || !isShortcut || key !== "c" || isEditableTarget(event.target)) return;
+      if (!selectedItemIds.length) return;
+      event.preventDefault();
+      copySelectedItems();
+    }
+    function handlePaste(event) {
+      if (activeTab !== "songbook" || isEditableTarget(event.target)) return;
+      const text = event.clipboardData?.getData("text/plain") || "";
+      if (!copiedChordItems.length && !text.trim()) return;
+      event.preventDefault();
+      pasteFromClipboardText(text);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("paste", handlePaste);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("paste", handlePaste);
+    };
+  }, [activeTab, chartSections, copiedChordItems, copiedChordText, pasteTarget, selectedItemIds]);
   useEffect(() => {
     if (!hasSupabaseConfig(supabaseConfig)) {
       setSyncClient(null);
@@ -1273,6 +1318,7 @@ function App() {
     const chart = chartLibrary.charts.find(item => item.id === id);
     setChordEditor(createChordEditorState());
     setSelectedItemIds([]);
+    setPasteTarget(null);
     setOpenBatchSectionId("");
     setChartMessage(chart ? `已切换：${chart.title}` : "");
   }
@@ -1285,6 +1331,10 @@ function App() {
       activeChartId: chart.id,
       charts: [...library.charts, chart]
     }));
+    setPasteTarget({
+      sectionId: chart.activeSectionId,
+      index: 0
+    });
     setChartMessage(`已新建：${chart.title}`);
   }
   function deleteActiveChart() {
@@ -1473,6 +1523,85 @@ function App() {
   function selectedItemsInChart() {
     return chartItemEntriesByIds(selectedItemIds).map(entry => entry.item);
   }
+  function setPasteTargetToSectionEnd(sectionId) {
+    const section = chartSections.find(item => item.id === sectionId);
+    setPasteTarget({
+      sectionId,
+      index: section?.items.length || 0
+    });
+  }
+  function setPasteTargetAfterItem(sectionId, index) {
+    setPasteTarget({
+      sectionId,
+      index: index + 1
+    });
+  }
+  function resolvePasteTarget() {
+    if (pasteTarget) {
+      const section = chartSections.find(item => item.id === pasteTarget.sectionId);
+      if (section) {
+        return {
+          sectionId: section.id,
+          index: Math.max(0, Math.min(pasteTarget.index, section.items.length))
+        };
+      }
+    }
+    return {
+      sectionId: activeSection.id,
+      index: activeSection.items.length
+    };
+  }
+  function parseClipboardItems(text) {
+    const lines = String(text || "").split(/\r?\n/);
+    const items = [];
+    const errors = [];
+    lines.forEach((line, index) => {
+      if (!line.trim()) return;
+      const result = parseShapeLine(line);
+      if (!result || result.error) {
+        errors.push(result?.error || `第 ${index + 1} 行为空`);
+        return;
+      }
+      const detectedNames = detectedNamesForFrets(result.frets);
+      items.push(createChartItem({
+        frets: result.frets,
+        detectedNames,
+        selectedName: result.label || detectedNames[0] || UNKNOWN_CHORD_NAME,
+        source: "粘贴文本"
+      }));
+    });
+    return {
+      items,
+      errors
+    };
+  }
+  function insertChordItems(sectionId, index, sourceItems, verb = "粘贴") {
+    if (!sourceItems.length) return [];
+    const insertedItems = sourceItems.map(item => ({
+      ...item,
+      id: createId("chord"),
+      source: `${item.source || "曲谱记录"} · ${verb}`
+    }));
+    updateChartSections(sections => sections.map(section => {
+      if (section.id !== sectionId) return section;
+      const insertIndex = Math.max(0, Math.min(index, section.items.length));
+      const items = [...section.items];
+      items.splice(insertIndex, 0, ...insertedItems);
+      return {
+        ...section,
+        items
+      };
+    }));
+    selectSection(sectionId, {
+      updatePasteTarget: false
+    });
+    setPasteTarget({
+      sectionId,
+      index: index + insertedItems.length
+    });
+    setSelectedItemIds(insertedItems.map(item => item.id));
+    return insertedItems;
+  }
   async function copySelectedItems() {
     const items = selectedItemsInChart();
     if (!items.length) {
@@ -1483,6 +1612,7 @@ function App() {
     setCopiedChordItems(items.map(item => ({
       ...item
     })));
+    setCopiedChordText(text);
     try {
       await navigator.clipboard.writeText(text);
       setChartMessage(`已复制 ${items.length} 个和弦，可以粘贴到任意段落。`);
@@ -1495,24 +1625,30 @@ function App() {
       setChartMessage("请先选择和弦并点击复制。");
       return;
     }
-    const pastedItems = copiedChordItems.map(item => ({
-      ...item,
-      id: createId("chord"),
-      source: `${item.source || "曲谱记录"} · 粘贴`
-    }));
-    updateChartSections(sections => sections.map(section => {
-      if (section.id !== sectionId) return section;
-      const insertIndex = Math.max(0, Math.min(index, section.items.length));
-      const items = [...section.items];
-      items.splice(insertIndex, 0, ...pastedItems);
-      return {
-        ...section,
-        items
-      };
-    }));
-    selectSection(sectionId);
-    setSelectedItemIds(pastedItems.map(item => item.id));
+    const pastedItems = insertChordItems(sectionId, index, copiedChordItems);
     setChartMessage(`已粘贴 ${pastedItems.length} 个和弦。`);
+  }
+  function pasteFromClipboardText(text) {
+    const target = resolvePasteTarget();
+    const clipboardText = String(text || "").trim();
+    const savedText = copiedChordText.trim();
+    const shouldUseInternalCopy = copiedChordItems.length && (!clipboardText || clipboardText === savedText);
+    let sourceItems = shouldUseInternalCopy ? copiedChordItems : [];
+    let errors = [];
+    if (!sourceItems.length && clipboardText) {
+      const parsed = parseClipboardItems(clipboardText);
+      sourceItems = parsed.items;
+      errors = parsed.errors;
+    }
+    if (!sourceItems.length && copiedChordItems.length && !clipboardText) {
+      sourceItems = copiedChordItems;
+    }
+    if (!sourceItems.length) {
+      setChartMessage(errors[0] || "剪贴板里没有识别到可粘贴的和弦按法。");
+      return;
+    }
+    const insertedItems = insertChordItems(target.sectionId, target.index, sourceItems);
+    setChartMessage(errors.length ? `已粘贴 ${insertedItems.length} 个和弦；有 ${errors.length} 行未解析。` : `已粘贴 ${insertedItems.length} 个和弦。`);
   }
   function clearSelectedItems() {
     setSelectedItemIds([]);
@@ -1537,12 +1673,19 @@ function App() {
       activeSectionId: section.id,
       sections: [...chart.sections, section]
     }));
+    setPasteTarget({
+      sectionId: section.id,
+      index: 0
+    });
     setChartMessage(`已添加段落：${section.title}`);
   }
-  function selectSection(sectionId) {
+  function selectSection(sectionId, options = {}) {
     updateActiveChart({
       activeSectionId: sectionId
     });
+    if (options.updatePasteTarget !== false) {
+      setPasteTargetToSectionEnd(sectionId);
+    }
   }
   function renameSection(sectionId, title) {
     updateChartSections(sections => sections.map(section => section.id === sectionId ? {
@@ -2229,6 +2372,7 @@ function App() {
     onClear: () => clearSection(section.id),
     onAddChord: () => openNewChordEditor(section.id),
     canPaste: Boolean(copiedChordItems.length),
+    pasteTargetIndex: pasteTarget?.sectionId === section.id ? pasteTarget.index : null,
     onPasteAt: index => pasteCopiedItems(section.id, index),
     batchOpen: openBatchSectionId === section.id,
     batchInput: batchInput,
@@ -2277,9 +2421,11 @@ function App() {
     selected: selectedItemIds.includes(item.id),
     onSelect: () => toggleSelectedItem(item.id),
     canPaste: Boolean(copiedChordItems.length),
+    isPasteTargetAfter: pasteTarget?.sectionId === section.id && pasteTarget.index === index + 1,
     isDragging: draggedChord?.itemIds?.includes(item.id),
     isDropTarget: !draggedChord?.itemIds?.includes(item.id) && dragTarget?.sectionId === section.id && dragTarget?.index === index,
-    onPasteBefore: () => pasteCopiedItems(section.id, index),
+    onPasteHere: () => pasteCopiedItems(section.id, index + 1),
+    onSetPasteTarget: () => setPasteTargetAfterItem(section.id, index),
     onDragStart: () => {
       const itemIsSelected = selectedItemIds.includes(item.id);
       const itemIds = itemIsSelected ? selectedItemIds : [item.id];
@@ -2508,6 +2654,7 @@ function ChartSection({
   onClear,
   onAddChord,
   canPaste,
+  pasteTargetIndex,
   onPasteAt,
   batchOpen,
   batchInput,
@@ -2521,7 +2668,7 @@ function ChartSection({
   isDropAtEnd
 }) {
   const sectionClass = ["chart-section", active ? "active-section" : "", isDragging ? "drag-aware-section" : "", isDropAtEnd ? "section-drop-target" : ""].filter(Boolean).join(" ");
-  const sequenceClass = ["chart-sequence", isDropAtEnd ? "drop-at-end" : "", section.items.length ? "" : "empty-sequence"].filter(Boolean).join(" ");
+  const sequenceClass = ["chart-sequence", isDropAtEnd ? "drop-at-end" : "", !section.items.length && pasteTargetIndex === 0 ? "paste-at-end" : "", section.items.length ? "" : "empty-sequence"].filter(Boolean).join(" ");
   return React.createElement("section", {
     className: sectionClass,
     onClick: onSelect,
@@ -2610,20 +2757,23 @@ function ChartItem({
   selected,
   onSelect,
   canPaste,
+  isPasteTargetAfter,
   isDragging,
   isDropTarget,
-  onPasteBefore,
+  onPasteHere,
+  onSetPasteTarget,
   onDragStart,
   onDragOverBefore,
   onDragEnd,
   onDropBefore,
   onEdit
 }) {
-  const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
+  const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isPasteTargetAfter ? "paste-target-after" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
   const itemName = displayChartItemName(item);
   return React.createElement("article", {
     className: cardClass,
     draggable: "true",
+    title: "\u5355\u51FB\u8BBE\u7F6E\u7C98\u8D34\u4F4D\u7F6E\uFF0C\u53CC\u51FB\u7F16\u8F91",
     onDragStart: event => {
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", item.id);
@@ -2645,12 +2795,19 @@ function ChartItem({
       event.stopPropagation();
       onDropBefore();
     },
-    onClick: onEdit
+    onClick: event => {
+      event.stopPropagation();
+      onSetPasteTarget();
+    },
+    onDoubleClick: event => {
+      event.stopPropagation();
+      onEdit();
+    }
   }, canPaste ? React.createElement("button", {
     className: "paste-before-button",
     onClick: event => {
       event.stopPropagation();
-      onPasteBefore();
+      onPasteHere();
     }
   }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, React.createElement("button", {
     className: selected ? "card-select-circle selected-select-circle" : "card-select-circle",
