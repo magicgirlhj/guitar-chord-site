@@ -1523,6 +1523,20 @@ function App() {
   function selectedItemsInChart() {
     return chartItemEntriesByIds(selectedItemIds).map(entry => entry.item);
   }
+  function chartItemEntryById(itemId) {
+    if (!itemId) return null;
+    for (const section of chartSections) {
+      const itemIndex = section.items.findIndex(item => item.id === itemId);
+      if (itemIndex >= 0) {
+        return {
+          sectionId: section.id,
+          itemIndex,
+          item: section.items[itemIndex]
+        };
+      }
+    }
+    return null;
+  }
   function setPasteTargetToSectionEnd(sectionId) {
     const section = chartSections.find(item => item.id === sectionId);
     setPasteTarget({
@@ -1667,6 +1681,7 @@ function App() {
     setSelectedItemIds([]);
     setChartMessage("已删除选中的和弦。");
   }
+  const firstSelectedEntry = chartItemEntryById(selectedItemIds[0]);
   function createSection() {
     const section = createEmptySection(`段落 ${chartSections.length + 1}`);
     updateActiveChart(chart => ({
@@ -2370,6 +2385,22 @@ function App() {
     },
     onBatchInputChange: setBatchInput,
     onBatchSubmit: () => parseBatchIntoSection(section.id),
+    selectionToolbar: firstSelectedEntry?.sectionId === section.id ? React.createElement("div", {
+      className: "bulk-toolbar section-bulk-toolbar",
+      onClick: event => event.stopPropagation()
+    }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: copySelectedItems
+    }, "\u590D\u5236"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: () => pasteCopiedItems(section.id, firstSelectedEntry.itemIndex + 1),
+      disabled: !copiedChordItems.length
+    }, "\u7C98\u8D34"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: clearSelectedItems
+    }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
+      className: "clipboard-status"
+    }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A") : null) : null,
     editorSlot: chordEditor.open && chordEditor.sectionId === section.id ? React.createElement(ChordEditorPanel, {
       compact: true,
       editor: chordEditor,
@@ -2407,22 +2438,6 @@ function App() {
     key: item.id,
     selected: selectedItemIds.includes(item.id),
     onSelect: () => toggleSelectedItem(item.id),
-    selectionToolbar: selectedItemIds.length && item.id === selectedItemIds[selectedItemIds.length - 1] ? React.createElement("div", {
-      className: "bulk-toolbar floating-bulk-toolbar",
-      onClick: event => event.stopPropagation()
-    }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
-      className: "ghost-button",
-      onClick: copySelectedItems
-    }, "\u590D\u5236"), React.createElement("button", {
-      className: "ghost-button",
-      onClick: () => pasteCopiedItems(section.id, index + 1),
-      disabled: !copiedChordItems.length
-    }, "\u7C98\u8D34"), React.createElement("button", {
-      className: "ghost-button",
-      onClick: clearSelectedItems
-    }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
-      className: "clipboard-status"
-    }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A") : null) : null,
     canPaste: Boolean(copiedChordItems.length),
     isPasteTargetAfter: pasteTarget?.sectionId === section.id && pasteTarget.index === index + 1,
     isDragging: draggedChord?.itemIds?.includes(item.id),
@@ -2664,6 +2679,7 @@ function ChartSection({
   onToggleBatch,
   onBatchInputChange,
   onBatchSubmit,
+  selectionToolbar,
   editorSlot,
   onDropAt,
   onDragOverAtEnd,
@@ -2726,7 +2742,7 @@ function ChartSection({
       onDelete();
     },
     title: "\u5220\u9664\u6BB5\u843D"
-  }, "x"))), editorSlot, batchOpen ? React.createElement("div", {
+  }, "x"))), selectionToolbar, editorSlot, batchOpen ? React.createElement("div", {
     className: "batch-input-panel",
     onClick: event => event.stopPropagation()
   }, React.createElement("textarea", {
@@ -2758,7 +2774,6 @@ function ChartSection({
 function ChartItem({
   item,
   selected,
-  selectionToolbar,
   onSelect,
   canPaste,
   isPasteTargetAfter,
@@ -2774,10 +2789,35 @@ function ChartItem({
 }) {
   const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isPasteTargetAfter ? "paste-target-after" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
   const itemName = displayChartItemName(item);
+  const clickTimerRef = useRef(null);
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) {
+        window.clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
+  function scheduleSelect() {
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      onSetPasteTarget();
+      onSelect();
+      clickTimerRef.current = null;
+    }, 180);
+  }
+  function editImmediately() {
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    onEdit();
+  }
   return React.createElement("article", {
     className: cardClass,
     draggable: "true",
-    title: "\u5355\u51FB\u8BBE\u7F6E\u7C98\u8D34\u4F4D\u7F6E\uFF0C\u53CC\u51FB\u7F16\u8F91",
+    title: "\u5355\u51FB\u9009\u62E9\u548C\u5F26\uFF0C\u53CC\u51FB\u7F16\u8F91",
     onDragStart: event => {
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", item.id);
@@ -2801,11 +2841,11 @@ function ChartItem({
     },
     onClick: event => {
       event.stopPropagation();
-      onSetPasteTarget();
+      scheduleSelect();
     },
     onDoubleClick: event => {
       event.stopPropagation();
-      onEdit();
+      editImmediately();
     }
   }, canPaste ? React.createElement("button", {
     className: "paste-before-button",
@@ -2813,7 +2853,7 @@ function ChartItem({
       event.stopPropagation();
       onPasteHere();
     }
-  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, selectionToolbar, React.createElement("button", {
+  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, React.createElement("button", {
     className: selected ? "card-select-circle selected-select-circle" : "card-select-circle",
     onClick: event => {
       event.stopPropagation();

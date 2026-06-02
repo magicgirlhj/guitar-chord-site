@@ -710,16 +710,9 @@ h2 {
   background: #f8f1e4;
 }
 
-.floating-bulk-toolbar {
-  position: absolute;
-  z-index: 8;
-  left: 50%;
-  bottom: calc(100% - 8px);
-  width: max-content;
-  max-width: min(520px, calc(100vw - 32px));
+.section-bulk-toolbar {
   margin: 0;
-  box-shadow: 0 16px 34px rgba(75, 62, 42, 0.2);
-  transform: translateX(-50%);
+  box-shadow: 0 12px 26px rgba(75, 62, 42, 0.12);
 }
 
 .bulk-toolbar strong {
@@ -733,7 +726,7 @@ h2 {
   font-weight: 900;
 }
 
-.floating-bulk-toolbar .clipboard-status {
+.section-bulk-toolbar .clipboard-status {
   white-space: nowrap;
 }
 
@@ -1661,23 +1654,16 @@ h2 {
     transform: scale(1);
   }
 
-  .floating-bulk-toolbar {
-    left: 10px;
-    right: 10px;
-    bottom: auto;
-    top: 8px;
-    width: auto;
-    max-width: none;
+  .section-bulk-toolbar {
     padding: 8px;
-    transform: none;
   }
 
-  .floating-bulk-toolbar .ghost-button {
+  .section-bulk-toolbar .ghost-button {
     min-height: 34px;
     padding: 0 9px;
   }
 
-  .floating-bulk-toolbar .clipboard-status {
+  .section-bulk-toolbar .clipboard-status {
     width: 100%;
     white-space: normal;
   }

@@ -1511,6 +1511,19 @@ function App() {
     return chartItemEntriesByIds(selectedItemIds).map((entry) => entry.item);
   }
 
+  function chartItemEntryById(itemId) {
+    if (!itemId) return null;
+
+    for (const section of chartSections) {
+      const itemIndex = section.items.findIndex((item) => item.id === itemId);
+      if (itemIndex >= 0) {
+        return { sectionId: section.id, itemIndex, item: section.items[itemIndex] };
+      }
+    }
+
+    return null;
+  }
+
   function setPasteTargetToSectionEnd(sectionId) {
     const section = chartSections.find((item) => item.id === sectionId);
     setPasteTarget({ sectionId, index: section?.items.length || 0 });
@@ -1669,6 +1682,8 @@ function App() {
     setSelectedItemIds([]);
     setChartMessage("已删除选中的和弦。");
   }
+
+  const firstSelectedEntry = chartItemEntryById(selectedItemIds[0]);
 
   function createSection() {
     const section = createEmptySection(`段落 ${chartSections.length + 1}`);
@@ -2425,6 +2440,29 @@ function App() {
                   }}
                   onBatchInputChange={setBatchInput}
                   onBatchSubmit={() => parseBatchIntoSection(section.id)}
+                  selectionToolbar={
+                    firstSelectedEntry?.sectionId === section.id ? (
+                      <div className="bulk-toolbar section-bulk-toolbar" onClick={(event) => event.stopPropagation()}>
+                        <strong>已选 {selectedItemIds.length} 个</strong>
+                        <button className="ghost-button" onClick={copySelectedItems}>
+                          复制
+                        </button>
+                        <button
+                          className="ghost-button"
+                          onClick={() => pasteCopiedItems(section.id, firstSelectedEntry.itemIndex + 1)}
+                          disabled={!copiedChordItems.length}
+                        >
+                          粘贴
+                        </button>
+                        <button className="ghost-button" onClick={clearSelectedItems}>
+                          取消选择
+                        </button>
+                        {copiedChordItems.length ? (
+                          <span className="clipboard-status">已复制 {copiedChordItems.length} 个</span>
+                        ) : null}
+                      </div>
+                    ) : null
+                  }
                   editorSlot={
                     chordEditor.open && chordEditor.sectionId === section.id ? (
                       <ChordEditorPanel
@@ -2462,29 +2500,6 @@ function App() {
                       key={item.id}
                       selected={selectedItemIds.includes(item.id)}
                       onSelect={() => toggleSelectedItem(item.id)}
-                      selectionToolbar={
-                        selectedItemIds.length && item.id === selectedItemIds[selectedItemIds.length - 1] ? (
-                          <div className="bulk-toolbar floating-bulk-toolbar" onClick={(event) => event.stopPropagation()}>
-                            <strong>已选 {selectedItemIds.length} 个</strong>
-                            <button className="ghost-button" onClick={copySelectedItems}>
-                              复制
-                            </button>
-                            <button
-                              className="ghost-button"
-                              onClick={() => pasteCopiedItems(section.id, index + 1)}
-                              disabled={!copiedChordItems.length}
-                            >
-                              粘贴
-                            </button>
-                            <button className="ghost-button" onClick={clearSelectedItems}>
-                              取消选择
-                            </button>
-                            {copiedChordItems.length ? (
-                              <span className="clipboard-status">已复制 {copiedChordItems.length} 个</span>
-                            ) : null}
-                          </div>
-                        ) : null
-                      }
                       canPaste={Boolean(copiedChordItems.length)}
                       isPasteTargetAfter={pasteTarget?.sectionId === section.id && pasteTarget.index === index + 1}
                       isDragging={draggedChord?.itemIds?.includes(item.id)}
@@ -2770,6 +2785,7 @@ function ChartSection({
   onToggleBatch,
   onBatchInputChange,
   onBatchSubmit,
+  selectionToolbar,
   editorSlot,
   onDropAt,
   onDragOverAtEnd,
@@ -2871,6 +2887,8 @@ function ChartSection({
         </div>
       </div>
 
+      {selectionToolbar}
+
       {editorSlot}
 
       {batchOpen ? (
@@ -2920,7 +2938,6 @@ function ChartSection({
 function ChartItem({
   item,
   selected,
-  selectionToolbar,
   onSelect,
   canPaste,
   isPasteTargetAfter,
@@ -2944,12 +2961,42 @@ function ChartItem({
     .filter(Boolean)
     .join(" ");
   const itemName = displayChartItemName(item);
+  const clickTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) {
+        window.clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
+
+  function scheduleSelect() {
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+    }
+
+    clickTimerRef.current = window.setTimeout(() => {
+      onSetPasteTarget();
+      onSelect();
+      clickTimerRef.current = null;
+    }, 180);
+  }
+
+  function editImmediately() {
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+
+    onEdit();
+  }
 
   return (
     <article
       className={cardClass}
       draggable="true"
-      title="单击设置粘贴位置，双击编辑"
+      title="单击选择和弦，双击编辑"
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", item.id);
@@ -2973,11 +3020,11 @@ function ChartItem({
       }}
       onClick={(event) => {
         event.stopPropagation();
-        onSetPasteTarget();
+        scheduleSelect();
       }}
       onDoubleClick={(event) => {
         event.stopPropagation();
-        onEdit();
+        editImmediately();
       }}
     >
       {canPaste ? (
@@ -2991,7 +3038,6 @@ function ChartItem({
           粘贴到这里
         </button>
       ) : null}
-      {selectionToolbar}
       <button
         className={selected ? "card-select-circle selected-select-circle" : "card-select-circle"}
         onClick={(event) => {
