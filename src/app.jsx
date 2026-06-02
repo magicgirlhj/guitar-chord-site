@@ -2402,22 +2402,6 @@ function App() {
               曲谱库会自动保存到当前浏览器；登录云同步后，会在同一账号的设备间合并保存。
             </p>
 
-            {selectedItemIds.length ? (
-              <div className="bulk-toolbar">
-                <strong>已选 {selectedItemIds.length} 个</strong>
-                <button className="ghost-button" onClick={copySelectedItems}>
-                  复制
-                </button>
-                <button className="ghost-button danger-button" onClick={deleteSelectedItems}>
-                  删除
-                </button>
-                <button className="ghost-button" onClick={clearSelectedItems}>
-                  取消选择
-                </button>
-                {copiedChordItems.length ? <span className="clipboard-status">已复制 {copiedChordItems.length} 个，可粘贴</span> : null}
-              </div>
-            ) : null}
-
             <div className="chart-sections" aria-label="曲谱段落">
               {chartSections.map((section) => (
                 <ChartSection
@@ -2478,6 +2462,29 @@ function App() {
                       key={item.id}
                       selected={selectedItemIds.includes(item.id)}
                       onSelect={() => toggleSelectedItem(item.id)}
+                      selectionToolbar={
+                        selectedItemIds.length && item.id === selectedItemIds[selectedItemIds.length - 1] ? (
+                          <div className="bulk-toolbar floating-bulk-toolbar" onClick={(event) => event.stopPropagation()}>
+                            <strong>已选 {selectedItemIds.length} 个</strong>
+                            <button className="ghost-button" onClick={copySelectedItems}>
+                              复制
+                            </button>
+                            <button
+                              className="ghost-button"
+                              onClick={() => pasteCopiedItems(section.id, index + 1)}
+                              disabled={!copiedChordItems.length}
+                            >
+                              粘贴
+                            </button>
+                            <button className="ghost-button" onClick={clearSelectedItems}>
+                              取消选择
+                            </button>
+                            {copiedChordItems.length ? (
+                              <span className="clipboard-status">已复制 {copiedChordItems.length} 个</span>
+                            ) : null}
+                          </div>
+                        ) : null
+                      }
                       canPaste={Boolean(copiedChordItems.length)}
                       isPasteTargetAfter={pasteTarget?.sectionId === section.id && pasteTarget.index === index + 1}
                       isDragging={draggedChord?.itemIds?.includes(item.id)}
@@ -2913,6 +2920,7 @@ function ChartSection({
 function ChartItem({
   item,
   selected,
+  selectionToolbar,
   onSelect,
   canPaste,
   isPasteTargetAfter,
@@ -2983,6 +2991,7 @@ function ChartItem({
           粘贴到这里
         </button>
       ) : null}
+      {selectionToolbar}
       <button
         className={selected ? "card-select-circle selected-select-circle" : "card-select-circle"}
         onClick={(event) => {

@@ -2346,20 +2346,7 @@ function App() {
     "aria-label": "\u66F2\u8C31\u540D\u79F0"
   })), React.createElement("p", {
     className: "save-note"
-  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), selectedItemIds.length ? React.createElement("div", {
-    className: "bulk-toolbar"
-  }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
-    className: "ghost-button",
-    onClick: copySelectedItems
-  }, "\u590D\u5236"), React.createElement("button", {
-    className: "ghost-button danger-button",
-    onClick: deleteSelectedItems
-  }, "\u5220\u9664"), React.createElement("button", {
-    className: "ghost-button",
-    onClick: clearSelectedItems
-  }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
-    className: "clipboard-status"
-  }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A\uFF0C\u53EF\u7C98\u8D34") : null) : null, React.createElement("div", {
+  }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), React.createElement("div", {
     className: "chart-sections",
     "aria-label": "\u66F2\u8C31\u6BB5\u843D"
   }, chartSections.map(section => React.createElement(ChartSection, {
@@ -2420,6 +2407,22 @@ function App() {
     key: item.id,
     selected: selectedItemIds.includes(item.id),
     onSelect: () => toggleSelectedItem(item.id),
+    selectionToolbar: selectedItemIds.length && item.id === selectedItemIds[selectedItemIds.length - 1] ? React.createElement("div", {
+      className: "bulk-toolbar floating-bulk-toolbar",
+      onClick: event => event.stopPropagation()
+    }, React.createElement("strong", null, "\u5DF2\u9009 ", selectedItemIds.length, " \u4E2A"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: copySelectedItems
+    }, "\u590D\u5236"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: () => pasteCopiedItems(section.id, index + 1),
+      disabled: !copiedChordItems.length
+    }, "\u7C98\u8D34"), React.createElement("button", {
+      className: "ghost-button",
+      onClick: clearSelectedItems
+    }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
+      className: "clipboard-status"
+    }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A") : null) : null,
     canPaste: Boolean(copiedChordItems.length),
     isPasteTargetAfter: pasteTarget?.sectionId === section.id && pasteTarget.index === index + 1,
     isDragging: draggedChord?.itemIds?.includes(item.id),
@@ -2755,6 +2758,7 @@ function ChartSection({
 function ChartItem({
   item,
   selected,
+  selectionToolbar,
   onSelect,
   canPaste,
   isPasteTargetAfter,
@@ -2809,7 +2813,7 @@ function ChartItem({
       event.stopPropagation();
       onPasteHere();
     }
-  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, React.createElement("button", {
+  }, "\u7C98\u8D34\u5230\u8FD9\u91CC") : null, selectionToolbar, React.createElement("button", {
     className: selected ? "card-select-circle selected-select-circle" : "card-select-circle",
     onClick: event => {
       event.stopPropagation();
