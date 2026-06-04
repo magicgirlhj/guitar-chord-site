@@ -2460,6 +2460,9 @@ function App() {
                         {copiedChordItems.length ? (
                           <span className="clipboard-status">已复制 {copiedChordItems.length} 个</span>
                         ) : null}
+                        <button className="ghost-button danger-button delete-selected-button" onClick={deleteSelectedItems}>
+                          删除和弦
+                        </button>
                       </div>
                     ) : null
                   }

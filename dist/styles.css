@@ -715,6 +715,10 @@ h2 {
   box-shadow: 0 12px 26px rgba(75, 62, 42, 0.12);
 }
 
+.delete-selected-button {
+  margin-left: auto;
+}
+
 .bulk-toolbar strong {
   margin-right: 4px;
   font-size: 0.9rem;

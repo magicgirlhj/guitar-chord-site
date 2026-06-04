@@ -2400,7 +2400,10 @@ function App() {
       onClick: clearSelectedItems
     }, "\u53D6\u6D88\u9009\u62E9"), copiedChordItems.length ? React.createElement("span", {
       className: "clipboard-status"
-    }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A") : null) : null,
+    }, "\u5DF2\u590D\u5236 ", copiedChordItems.length, " \u4E2A") : null, React.createElement("button", {
+      className: "ghost-button danger-button delete-selected-button",
+      onClick: deleteSelectedItems
+    }, "\u5220\u9664\u548C\u5F26")) : null,
     editorSlot: chordEditor.open && chordEditor.sectionId === section.id ? React.createElement(ChordEditorPanel, {
       compact: true,
       editor: chordEditor,
