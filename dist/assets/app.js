@@ -2214,7 +2214,13 @@ function App() {
   }, "\u65B0\u5EFA\u66F2\u8C31"), React.createElement("button", {
     className: "ghost-button add-button",
     onClick: createSection
-  }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("button", {
+  }, "\u6DFB\u52A0\u6BB5\u843D"), React.createElement("details", {
+    className: "more-actions-menu"
+  }, React.createElement("summary", {
+    className: "ghost-button more-actions-trigger"
+  }, "\u66F4\u591A"), React.createElement("div", {
+    className: "more-actions-list"
+  }, React.createElement("button", {
     className: "ghost-button",
     onClick: exportChart
   }, "\u5BFC\u51FA"), React.createElement("button", {
@@ -2226,7 +2232,7 @@ function App() {
   }, "\u5220\u9664\u5F53\u524D"), React.createElement("button", {
     className: "ghost-button danger-button",
     onClick: () => setChartItems([])
-  }, "\u6E05\u7A7A\u6BB5\u843D"))), React.createElement("input", {
+  }, "\u6E05\u7A7A\u6BB5\u843D"))))), React.createElement("input", {
     ref: importInputRef,
     className: "hidden-file-input",
     type: "file",
@@ -2338,6 +2344,16 @@ function App() {
     className: "ghost-button danger-button",
     onClick: clearSyncSettings
   }, "\u6E05\u9664"))) : null), React.createElement("div", {
+    className: "songbook-meta-grid"
+  }, React.createElement("label", {
+    className: "chart-title-field"
+  }, React.createElement("span", null, "\u66F2\u8C31\u540D\u79F0"), React.createElement("input", {
+    className: "text-field",
+    value: chartTitle,
+    onChange: event => setChartTitle(event.target.value),
+    placeholder: "\u4F8B\u5982 City Pop \u7EC3\u4E60 / \u65B0\u6B4C Verse",
+    "aria-label": "\u66F2\u8C31\u540D\u79F0"
+  })), React.createElement("div", {
     className: "chart-library-bar"
   }, React.createElement("label", {
     className: "chart-select-field"
@@ -2351,15 +2367,7 @@ function App() {
     key: chart.id
   }, chart.title || "未命名曲谱", " (", flattenSections(chart.sections || []).length, ")")))), React.createElement("span", {
     className: "library-count"
-  }, "\u5171 ", chartLibrary.charts.length, " \u4EFD\u66F2\u8C31")), React.createElement("label", {
-    className: "chart-title-field"
-  }, React.createElement("span", null, "\u66F2\u8C31\u540D\u79F0"), React.createElement("input", {
-    className: "text-field",
-    value: chartTitle,
-    onChange: event => setChartTitle(event.target.value),
-    placeholder: "\u4F8B\u5982 City Pop \u7EC3\u4E60 / \u65B0\u6B4C Verse",
-    "aria-label": "\u66F2\u8C31\u540D\u79F0"
-  })), React.createElement("p", {
+  }, "\u5171 ", chartLibrary.charts.length, " \u4EFD\u66F2\u8C31"))), React.createElement("p", {
     className: "save-note"
   }, "\u66F2\u8C31\u5E93\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5230\u5F53\u524D\u6D4F\u89C8\u5668\uFF1B\u767B\u5F55\u4E91\u540C\u6B65\u540E\uFF0C\u4F1A\u5728\u540C\u4E00\u8D26\u53F7\u7684\u8BBE\u5907\u95F4\u5408\u5E76\u4FDD\u5B58\u3002"), React.createElement("div", {
     className: "chart-sections",

@@ -2229,18 +2229,23 @@ function App() {
                 <button className="ghost-button add-button" onClick={createSection}>
                   添加段落
                 </button>
-                <button className="ghost-button" onClick={exportChart}>
-                  导出
-                </button>
-                <button className="ghost-button" onClick={() => importInputRef.current?.click()}>
-                  导入
-                </button>
-                <button className="ghost-button danger-button" onClick={deleteActiveChart}>
-                  删除当前
-                </button>
-                <button className="ghost-button danger-button" onClick={() => setChartItems([])}>
-                  清空段落
-                </button>
+                <details className="more-actions-menu">
+                  <summary className="ghost-button more-actions-trigger">更多</summary>
+                  <div className="more-actions-list">
+                    <button className="ghost-button" onClick={exportChart}>
+                      导出
+                    </button>
+                    <button className="ghost-button" onClick={() => importInputRef.current?.click()}>
+                      导入
+                    </button>
+                    <button className="ghost-button danger-button" onClick={deleteActiveChart}>
+                      删除当前
+                    </button>
+                    <button className="ghost-button danger-button" onClick={() => setChartItems([])}>
+                      清空段落
+                    </button>
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -2383,35 +2388,36 @@ function App() {
               ) : null}
             </div>
 
-            <div className="chart-library-bar">
-              <label className="chart-select-field">
-                <span>当前曲谱</span>
-                <select
-                  className="chart-select"
-                  value={activeChart.id}
-                  onChange={(event) => selectChart(event.target.value)}
-                  aria-label="选择曲谱"
-                >
-                  {chartLibrary.charts.map((chart) => (
-                    <option value={chart.id} key={chart.id}>
-                      {chart.title || "未命名曲谱"} ({flattenSections(chart.sections || []).length})
-                    </option>
-                  ))}
-                </select>
+            <div className="songbook-meta-grid">
+              <label className="chart-title-field">
+                <span>曲谱名称</span>
+                <input
+                  className="text-field"
+                  value={chartTitle}
+                  onChange={(event) => setChartTitle(event.target.value)}
+                  placeholder="例如 City Pop 练习 / 新歌 Verse"
+                  aria-label="曲谱名称"
+                />
               </label>
-              <span className="library-count">共 {chartLibrary.charts.length} 份曲谱</span>
+              <div className="chart-library-bar">
+                <label className="chart-select-field">
+                  <span>当前曲谱</span>
+                  <select
+                    className="chart-select"
+                    value={activeChart.id}
+                    onChange={(event) => selectChart(event.target.value)}
+                    aria-label="选择曲谱"
+                  >
+                    {chartLibrary.charts.map((chart) => (
+                      <option value={chart.id} key={chart.id}>
+                        {chart.title || "未命名曲谱"} ({flattenSections(chart.sections || []).length})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="library-count">共 {chartLibrary.charts.length} 份曲谱</span>
+              </div>
             </div>
-
-            <label className="chart-title-field">
-              <span>曲谱名称</span>
-              <input
-                className="text-field"
-                value={chartTitle}
-                onChange={(event) => setChartTitle(event.target.value)}
-                placeholder="例如 City Pop 练习 / 新歌 Verse"
-                aria-label="曲谱名称"
-              />
-            </label>
 
             <p className="save-note">
               曲谱库会自动保存到当前浏览器；登录云同步后，会在同一账号的设备间合并保存。

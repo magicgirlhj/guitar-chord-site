@@ -1,17 +1,18 @@
 :root {
-  --bg: #f3efe7;
+  --bg: #f6f5f2;
   --page-ink: #171512;
-  --page-muted: #6d6458;
-  --surface: #fffdf8;
-  --surface-strong: #eee2cc;
+  --page-muted: #68635c;
+  --surface: #ffffff;
+  --surface-strong: #f1eee8;
   --ink: #171512;
-  --muted: #6a6257;
-  --line: #2e2922;
-  --accent: #b99358;
-  --accent-dark: #7f5d2a;
-  --warm: #a87436;
-  --danger: #a83232;
-  --shadow: 0 24px 55px rgba(75, 62, 42, 0.12), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --muted: #6b655e;
+  --line: #d8d2c8;
+  --line-strong: #171512;
+  --accent: #f26a21;
+  --accent-dark: #9b3f0c;
+  --warm: #b2662b;
+  --danger: #b4232d;
+  --shadow: 0 18px 46px rgba(23, 21, 18, 0.08), 0 1px 0 rgba(255, 255, 255, 0.88) inset;
 }
 
 * {
@@ -22,8 +23,8 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(243, 239, 231, 0.88) 340px, transparent),
-    linear-gradient(135deg, #faf7ef 0%, #f2ece1 48%, #e8decf 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 245, 242, 0.92) 320px, transparent),
+    linear-gradient(135deg, #fbfaf7 0%, #f6f5f2 54%, #ece8df 100%),
     var(--bg);
   color: var(--page-ink);
   font-family:
@@ -67,12 +68,12 @@ button {
   height: 42px;
   display: grid;
   place-items: center;
-  border: 2px solid var(--accent);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #171512;
-  color: #f7e8c4;
+  color: #fff7ed;
   font-weight: 800;
-  box-shadow: 0 14px 26px rgba(82, 67, 43, 0.18);
+  box-shadow: 0 14px 26px rgba(23, 21, 18, 0.14);
 }
 
 .brand-row {
@@ -104,7 +105,7 @@ h1 {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 2px solid var(--accent);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
@@ -129,15 +130,15 @@ h1 {
   gap: 8px;
   margin-bottom: 18px;
   padding: 8px;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 253, 248, 0.94);
-  box-shadow: 0 12px 28px rgba(75, 62, 42, 0.1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(23, 21, 18, 0.08);
 }
 
 .tab-button {
   min-height: 44px;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
@@ -145,7 +146,7 @@ h1 {
 }
 
 .active-tab {
-  border-color: var(--line);
+  border-color: var(--line-strong);
   background: #171512;
   color: #fffdf8;
 }
@@ -186,8 +187,8 @@ h1 {
 }
 
 .panel {
-  border: 2px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -246,7 +247,7 @@ h2 {
 .text-field {
   width: 100%;
   min-height: 48px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
@@ -259,7 +260,7 @@ h2 {
 
 .text-field:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(201, 168, 106, 0.24);
+  box-shadow: 0 0 0 4px rgba(242, 106, 33, 0.14);
 }
 
 .primary-button,
@@ -267,7 +268,7 @@ h2 {
 .chip {
   min-height: 42px;
   border-radius: 8px;
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   transition:
     transform 0.16s ease,
     background 0.16s ease,
@@ -276,14 +277,15 @@ h2 {
 
 .primary-button {
   padding: 0 18px;
-  background: var(--accent);
-  color: #15130f;
+  background: #171512;
+  color: #fffdf8;
   font-weight: 800;
-  border-color: var(--line);
+  border-color: #171512;
 }
 
 .primary-button:hover {
-  background: #dbc184;
+  background: var(--accent);
+  color: #171512;
 }
 
 .ghost-button,
@@ -705,14 +707,14 @@ h2 {
 .bulk-toolbar {
   margin-bottom: 14px;
   padding: 10px;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  background: #f8f1e4;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .section-bulk-toolbar {
   margin: 0;
-  box-shadow: 0 12px 26px rgba(75, 62, 42, 0.12);
+  box-shadow: 0 12px 26px rgba(23, 21, 18, 0.08);
 }
 
 .delete-selected-button {
@@ -921,18 +923,67 @@ h2 {
   background: #fffdf8;
 }
 
+.chart-panel .panel-inner {
+  display: flex;
+  flex-direction: column;
+}
+
 .chart-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+}
+
+.more-actions-menu {
+  position: relative;
+}
+
+.more-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  list-style: none;
+}
+
+.more-actions-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.more-actions-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 12;
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 18px 38px rgba(23, 21, 18, 0.12);
+}
+
+.more-actions-list .ghost-button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.songbook-meta-grid {
+  order: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, 460px) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 10px;
 }
 
 .chart-library-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 360px) auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
-  margin-bottom: 12px;
 }
 
 .chart-select-field {
@@ -950,7 +1001,7 @@ h2 {
 .chart-select {
   width: 100%;
   min-height: 46px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
@@ -962,7 +1013,7 @@ h2 {
 
 .chart-select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(201, 168, 106, 0.24);
+  box-shadow: 0 0 0 4px rgba(242, 106, 33, 0.14);
 }
 
 .library-count {
@@ -971,7 +1022,7 @@ h2 {
   min-height: 34px;
   width: fit-content;
   padding: 0 10px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface-strong);
   color: var(--ink);
@@ -984,13 +1035,15 @@ h2 {
 }
 
 .sync-card {
+  order: 3;
   display: grid;
   gap: 12px;
-  margin-bottom: 14px;
+  margin: 2px 0 14px;
   padding: 12px;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  background: #f8f1e4;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 28px rgba(23, 21, 18, 0.04);
 }
 
 .sync-state {
@@ -1020,7 +1073,7 @@ h2 {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: #c8bba8;
 }
@@ -1108,11 +1161,11 @@ h2 {
 .chart-title-field {
   display: grid;
   gap: 8px;
-  max-width: 460px;
-  margin-bottom: 10px;
+  max-width: none;
 }
 
 .save-note {
+  order: 2;
   margin-bottom: 14px;
   color: var(--muted);
   font-size: 0.9rem;
@@ -1120,17 +1173,22 @@ h2 {
 }
 
 .chart-sections {
+  order: 4;
   display: grid;
   gap: 14px;
+}
+
+.chart-message {
+  order: 5;
 }
 
 .chart-section {
   display: grid;
   gap: 12px;
   padding: 14px;
-  border: 2px solid #d4c8b6;
-  border-radius: 8px;
-  background: rgba(255, 253, 248, 0.76);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease,
@@ -1142,15 +1200,15 @@ h2 {
 }
 
 .active-section {
-  border-color: var(--accent);
-  background: #fffdf8;
-  box-shadow: 0 14px 30px rgba(75, 62, 42, 0.09);
+  border-color: rgba(242, 106, 33, 0.56);
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(23, 21, 18, 0.06);
 }
 
 .section-drop-target {
   border-color: var(--accent);
-  background: #fff9ec;
-  box-shadow: 0 16px 36px rgba(75, 62, 42, 0.12);
+  background: #fff7ed;
+  box-shadow: 0 16px 36px rgba(23, 21, 18, 0.08);
 }
 
 .chart-section-header {
@@ -1175,7 +1233,7 @@ h2 {
 .section-title-input {
   width: 100%;
   min-height: 42px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
@@ -1187,7 +1245,7 @@ h2 {
 
 .section-title-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(201, 168, 106, 0.24);
+  box-shadow: 0 0 0 4px rgba(242, 106, 33, 0.14);
 }
 
 .section-meta {
@@ -1202,7 +1260,7 @@ h2 {
 
 .active-section-pill {
   padding: 5px 8px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface-strong);
   color: var(--ink);
@@ -1212,7 +1270,7 @@ h2 {
   display: grid;
   gap: 8px;
   padding: 10px;
-  border: 2px dashed var(--line);
+  border: 1px dashed var(--line);
   border-radius: 8px;
   background: rgba(255, 253, 248, 0.92);
 }
@@ -1221,7 +1279,7 @@ h2 {
   width: 100%;
   min-height: 128px;
   resize: vertical;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
@@ -1232,7 +1290,7 @@ h2 {
 
 .batch-textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(201, 168, 106, 0.24);
+  box-shadow: 0 0 0 4px rgba(242, 106, 33, 0.14);
 }
 
 .chart-sequence {
@@ -1293,10 +1351,10 @@ h2 {
   gap: 8px;
   min-height: 184px;
   padding: 12px 10px 10px;
-  border: 2px solid var(--line);
-  border-radius: 8px;
-  background: #fffdf8;
-  box-shadow: 0 14px 30px rgba(75, 62, 42, 0.1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(23, 21, 18, 0.05);
   cursor: grab;
   transition:
     transform 0.16s ease,
@@ -1306,19 +1364,21 @@ h2 {
 
 .chart-card.drop-before {
   border-color: var(--accent);
-  background: #fff9ec;
+  background: #fff7ed;
   transform: translateY(-2px);
-  box-shadow: 0 18px 38px rgba(75, 62, 42, 0.18);
+  box-shadow: 0 18px 38px rgba(23, 21, 18, 0.1);
 }
 
 .selected-chart-card {
-  border-color: #171512;
-  background: #fff9ec;
-  box-shadow: 0 18px 38px rgba(75, 62, 42, 0.18);
+  border-color: var(--line-strong);
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px var(--line-strong),
+    0 18px 38px rgba(23, 21, 18, 0.1);
 }
 
 .chart-card.paste-target-after {
-  border-color: #171512;
+  border-color: var(--line-strong);
 }
 
 .chart-card.drop-before::before {
@@ -1330,7 +1390,7 @@ h2 {
   width: 4px;
   border-radius: 999px;
   background: #171512;
-  box-shadow: 0 0 0 3px rgba(201, 168, 106, 0.38);
+  box-shadow: 0 0 0 3px rgba(242, 106, 33, 0.22);
 }
 
 .chart-card.paste-target-after::after {
@@ -1342,7 +1402,7 @@ h2 {
   width: 4px;
   border-radius: 999px;
   background: #171512;
-  box-shadow: 0 0 0 3px rgba(201, 168, 106, 0.3);
+  box-shadow: 0 0 0 3px rgba(242, 106, 33, 0.22);
 }
 
 .dragging-card {
@@ -1352,7 +1412,7 @@ h2 {
 
 .chart-card:hover {
   border-color: var(--accent);
-  box-shadow: 0 18px 36px rgba(75, 62, 42, 0.14);
+  box-shadow: 0 18px 36px rgba(23, 21, 18, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1401,10 +1461,10 @@ h2 {
   z-index: 3;
   width: 22px;
   height: 22px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
-  box-shadow: 0 8px 18px rgba(75, 62, 42, 0.16);
+  box-shadow: 0 8px 18px rgba(23, 21, 18, 0.12);
   opacity: 0;
   transform: scale(0.86);
   transition:
@@ -1435,9 +1495,9 @@ h2 {
 .chart-diagram-wrap {
   width: 104px;
   padding: 4px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  background: #fbfaf8;
   justify-self: center;
 }
 
@@ -1557,6 +1617,7 @@ h2 {
   .app-shell {
     width: min(100% - 20px, 1180px);
     padding-top: 18px;
+    padding-bottom: 94px;
   }
 
   .topbar,
@@ -1604,14 +1665,38 @@ h2 {
   }
 
   .app-tabs {
-    grid-template-columns: 1fr;
-    position: sticky;
-    top: 0;
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    z-index: 30;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    border-radius: 14px;
+    box-shadow: 0 18px 38px rgba(23, 21, 18, 0.16);
   }
 
   .chart-library-bar {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .songbook-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .more-actions-menu {
+    width: 100%;
+  }
+
+  .more-actions-trigger {
+    width: 100%;
+  }
+
+  .more-actions-list {
+    right: auto;
+    left: 0;
+    width: 100%;
   }
 
   .fretboard-toolbar,
@@ -1659,6 +1744,9 @@ h2 {
   }
 
   .section-bulk-toolbar {
+    position: sticky;
+    bottom: 76px;
+    z-index: 16;
     padding: 8px;
   }
 
