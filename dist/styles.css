@@ -1535,13 +1535,13 @@ h2 {
   align-items: center;
   justify-content: center;
   max-width: 100%;
-  min-height: 21px;
-  padding: 2px 7px;
-  border: 1px solid rgba(23, 21, 18, 0.28);
+  min-height: 19px;
+  padding: 1px 7px;
+  border: 1px solid rgba(23, 21, 18, 0.24);
   border-radius: 999px;
   background: #171512;
   color: #fffdf8;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 900;
   line-height: 1.15;
   overflow: hidden;

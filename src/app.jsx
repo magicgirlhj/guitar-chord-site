@@ -2971,6 +2971,7 @@ function ChartItem({
     .join(" ");
   const itemName = displayChartItemName(item);
   const positionLabel = item.position || shapePositionName(item.frets);
+  const shouldShowPositionLabel = positionLabel && positionLabel !== "开放把位";
   const clickTimerRef = useRef(null);
 
   useEffect(() => {
@@ -3060,7 +3061,7 @@ function ChartItem({
       />
       <div className="chart-card-main">
         <h3>[{itemName}]</h3>
-        <span className="card-position-badge">{positionLabel}</span>
+        {shouldShowPositionLabel ? <span className="card-position-badge">{positionLabel}</span> : null}
         <div className="chart-diagram-wrap">
           <ChordDiagram shape={item.frets} root={item.root} />
         </div>
