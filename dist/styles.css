@@ -1197,8 +1197,8 @@ h2 {
 
 .chart-section {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.7);
@@ -1308,15 +1308,15 @@ h2 {
 
 .chart-sequence {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 178px));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(122px, 136px));
+  gap: 6px;
   align-items: start;
 }
 
 .chart-sequence.paste-at-end:not(.empty-sequence)::after {
   content: "";
   display: block;
-  min-height: 182px;
+  min-height: 150px;
   border-left: 4px solid #171512;
   border-radius: 999px;
   box-shadow: 0 0 0 3px rgba(201, 168, 106, 0.28);
@@ -1325,7 +1325,7 @@ h2 {
 .chart-sequence.drop-at-end:not(.empty-sequence)::after {
   content: "";
   display: block;
-  min-height: 182px;
+  min-height: 150px;
   border: 3px dashed var(--accent);
   border-radius: 8px;
   background: rgba(201, 168, 106, 0.15);
@@ -1361,9 +1361,9 @@ h2 {
 .chart-card {
   position: relative;
   display: grid;
-  gap: 8px;
-  min-height: 184px;
-  padding: 12px 10px 10px;
+  gap: 5px;
+  min-height: 150px;
+  padding: 7px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #ffffff;
@@ -1435,8 +1435,10 @@ h2 {
 
 .chart-card-main {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   align-items: start;
+  justify-items: center;
+  min-width: 0;
 }
 
 .paste-before-button {
@@ -1506,24 +1508,75 @@ h2 {
 }
 
 .chart-diagram-wrap {
-  width: 104px;
-  padding: 4px;
+  width: min(112px, 100%);
+  padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   background: #fbfaf8;
   justify-self: center;
 }
 
 .chart-card h3 {
-  min-height: 22px;
-  padding-left: 28px;
-  padding-right: 76px;
+  width: 100%;
+  min-height: 18px;
+  padding-left: 24px;
+  padding-right: 4px;
   overflow: hidden;
-  font-size: 0.98rem;
+  font-size: 0.88rem;
   font-weight: 900;
   line-height: 1.2;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-position-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 21px;
+  padding: 2px 7px;
+  border: 1px solid rgba(23, 21, 18, 0.28);
+  border-radius: 999px;
+  background: #171512;
+  color: #fffdf8;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.15;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-card .diagram-line {
+  stroke: #5d5348;
+  stroke-width: 1.45;
+}
+
+.chart-card .diagram-nut {
+  stroke-width: 4.5;
+}
+
+.chart-card .diagram-dot,
+.chart-card .diagram-root {
+  r: 13px;
+}
+
+.chart-card .diagram-text {
+  font-size: 13px;
+}
+
+.chart-card .diagram-label,
+.chart-card .diagram-fret-label {
+  fill: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.chart-card .diagram-fret-label {
+  font-size: 15px;
 }
 
 .card-shape-code {
@@ -1537,8 +1590,12 @@ h2 {
 
 .card-note {
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .chart-card-actions {
@@ -1814,7 +1871,7 @@ h2 {
   }
 
   .chart-sequence {
-    grid-template-columns: repeat(auto-fill, minmax(min(146px, 100%), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(136px, 100%), 1fr));
   }
 
   .card-select-circle {
@@ -1881,12 +1938,12 @@ h2 {
   }
 
   .chart-card {
-    min-height: 176px;
-    padding: 10px;
+    min-height: 158px;
+    padding: 8px;
   }
 
   .chart-card h3 {
-    padding-left: 52px;
+    padding-left: 48px;
     padding-right: 4px;
   }
 
@@ -1895,7 +1952,7 @@ h2 {
   }
 
   .chart-diagram-wrap {
-    width: 104px;
+    width: min(118px, 100%);
   }
 }
 
@@ -1915,6 +1972,6 @@ h2 {
   }
 
   .chart-sequence {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(min(126px, 100%), 1fr));
   }
 }

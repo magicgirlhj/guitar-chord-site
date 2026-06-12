@@ -2970,6 +2970,7 @@ function ChartItem({
     .filter(Boolean)
     .join(" ");
   const itemName = displayChartItemName(item);
+  const positionLabel = item.position || shapePositionName(item.frets);
   const clickTimerRef = useRef(null);
 
   useEffect(() => {
@@ -3059,8 +3060,9 @@ function ChartItem({
       />
       <div className="chart-card-main">
         <h3>[{itemName}]</h3>
+        <span className="card-position-badge">{positionLabel}</span>
         <div className="chart-diagram-wrap">
-          <ChordDiagram shape={item.frets} root={item.root} startAtLowestFret showFretNumbers={false} />
+          <ChordDiagram shape={item.frets} root={item.root} />
         </div>
         {item.note ? <p className="card-note">{item.note}</p> : null}
       </div>
