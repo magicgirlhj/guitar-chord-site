@@ -1668,6 +1668,14 @@ function App() {
     setSelectedItemIds([]);
     setChartMessage("已取消选择。");
   }
+  function clearSelectedItemsSilently() {
+    setSelectedItemIds(ids => ids.length ? [] : ids);
+  }
+  function handleAppClick(event) {
+    if (activeTab !== "songbook" || !selectedItemIds.length) return;
+    if (event.target?.closest?.(".chart-card, .section-bulk-toolbar")) return;
+    clearSelectedItemsSilently();
+  }
   function deleteSelectedItems() {
     if (!selectedItemIds.length) {
       setChartMessage("请先选择和弦。");
@@ -2042,7 +2050,8 @@ function App() {
     });
   }
   return React.createElement("div", {
-    className: "app-shell"
+    className: "app-shell",
+    onClick: handleAppClick
   }, React.createElement("header", {
     className: "topbar"
   }, React.createElement("div", {

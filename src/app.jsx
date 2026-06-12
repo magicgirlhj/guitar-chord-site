@@ -1669,6 +1669,17 @@ function App() {
     setChartMessage("已取消选择。");
   }
 
+  function clearSelectedItemsSilently() {
+    setSelectedItemIds((ids) => (ids.length ? [] : ids));
+  }
+
+  function handleAppClick(event) {
+    if (activeTab !== "songbook" || !selectedItemIds.length) return;
+    if (event.target?.closest?.(".chart-card, .section-bulk-toolbar")) return;
+
+    clearSelectedItemsSilently();
+  }
+
   function deleteSelectedItems() {
     if (!selectedItemIds.length) {
       setChartMessage("请先选择和弦。");
@@ -2028,7 +2039,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClick={handleAppClick}>
       <header className="topbar">
         <div className="brand">
           <div className="brand-row">
