@@ -19,6 +19,10 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 320px;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -31,6 +35,7 @@ body {
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   letter-spacing: 0;
+  overflow-x: hidden;
 }
 
 button,
@@ -38,10 +43,12 @@ input,
 select,
 textarea {
   font: inherit;
+  max-width: 100%;
 }
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-shell {
@@ -143,6 +150,8 @@ h1 {
   background: transparent;
   color: var(--muted);
   font-weight: 900;
+  line-height: 1.2;
+  padding: 0 12px;
 }
 
 .active-tab {
@@ -364,6 +373,8 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  max-width: 100%;
+  min-width: 0;
   min-height: 34px;
   padding: 0 10px;
   border: 2px solid var(--line);
@@ -371,6 +382,7 @@ h2 {
   background: var(--surface-strong);
   color: var(--muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .metric strong {
@@ -594,6 +606,7 @@ h2 {
   border: 2px solid var(--line);
   border-radius: 8px;
   background: #f7f0e3;
+  touch-action: manipulation;
 }
 
 .fret-row-label {
@@ -1617,7 +1630,7 @@ h2 {
   .app-shell {
     width: min(100% - 20px, 1180px);
     padding-top: 18px;
-    padding-bottom: 94px;
+    padding-bottom: 42px;
   }
 
   .topbar,
@@ -1631,6 +1644,16 @@ h2 {
     justify-content: center;
   }
 
+  .primary-button,
+  .ghost-button,
+  .chip,
+  .candidate-chip,
+  .mini-toggle,
+  .icon-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   .field-row {
     grid-template-columns: 1fr;
   }
@@ -1641,6 +1664,21 @@ h2 {
 
   .panel-inner {
     padding: 16px;
+  }
+
+  .chart-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .chart-actions .ghost-button,
+  .editor-actions .primary-button,
+  .editor-actions .ghost-button,
+  .batch-actions .ghost-button,
+  .sync-setting-actions .ghost-button,
+  .sync-auth-actions .ghost-button {
+    width: 100%;
   }
 
   .identifier-grid {
@@ -1665,15 +1703,23 @@ h2 {
   }
 
   .app-tabs {
-    position: fixed;
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
+    position: sticky;
+    top: 8px;
+    right: auto;
+    bottom: auto;
+    left: auto;
     z-index: 30;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 0;
-    border-radius: 14px;
-    box-shadow: 0 18px 38px rgba(23, 21, 18, 0.16);
+    margin-bottom: 18px;
+    padding-bottom: 8px;
+    border-radius: 12px;
+    box-shadow: 0 14px 30px rgba(23, 21, 18, 0.12);
+  }
+
+  .tab-button {
+    min-height: 52px;
+    padding: 8px 10px;
+    white-space: normal;
   }
 
   .chart-library-bar {
@@ -1681,11 +1727,17 @@ h2 {
     align-items: stretch;
   }
 
+  .library-count {
+    width: 100%;
+    justify-content: center;
+  }
+
   .songbook-meta-grid {
     grid-template-columns: 1fr;
   }
 
   .more-actions-menu {
+    grid-column: 1 / -1;
     width: 100%;
   }
 
@@ -1705,8 +1757,35 @@ h2 {
     align-items: stretch;
   }
 
+  .position-control {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .position-control .ghost-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .section-meta {
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .section-meta > span,
+  .section-meta .active-section-pill {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .section-meta .ghost-button,
+  .section-meta .icon-button {
+    width: 100%;
   }
 
   .string-status-grid {
@@ -1714,12 +1793,12 @@ h2 {
   }
 
   .click-fretboard {
-    min-height: 300px;
+    min-height: clamp(280px, 82vw, 330px);
   }
 
   .string-dot {
-    width: 26px;
-    height: 32px;
+    width: 42px;
+    height: 44px;
   }
 
   .sync-settings {
@@ -1735,23 +1814,54 @@ h2 {
   }
 
   .chart-sequence {
-    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(146px, 100%), 1fr));
   }
 
   .card-select-circle {
+    top: 4px;
+    left: 4px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     opacity: 1;
     transform: scale(1);
   }
 
+  .card-select-circle::before {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border: 1px solid var(--line);
+    border-radius: inherit;
+    background: var(--surface);
+    box-shadow: 0 8px 18px rgba(23, 21, 18, 0.12);
+  }
+
+  .selected-select-circle {
+    background: transparent;
+  }
+
+  .selected-select-circle::before {
+    border-color: #171512;
+    background: #171512;
+  }
+
+  .selected-select-circle::after {
+    inset: 14px;
+    z-index: 1;
+  }
+
   .section-bulk-toolbar {
     position: sticky;
-    bottom: 76px;
+    bottom: 12px;
     z-index: 16;
     padding: 8px;
   }
 
   .section-bulk-toolbar .ghost-button {
-    min-height: 34px;
+    min-height: 44px;
     padding: 0 9px;
   }
 
@@ -1761,9 +1871,23 @@ h2 {
   }
 
   .paste-before-button {
+    position: static;
+    order: 2;
+    width: 100%;
+    min-height: 44px;
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+  }
+
+  .chart-card {
+    min-height: 176px;
+    padding: 10px;
+  }
+
+  .chart-card h3 {
+    padding-left: 52px;
+    padding-right: 4px;
   }
 
   .section-chord-editor-panel .chord-editor-layout {
@@ -1772,5 +1896,25 @@ h2 {
 
   .chart-diagram-wrap {
     width: 104px;
+  }
+}
+
+@media (max-width: 380px) {
+  .voicing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-section,
+  .fretboard-editor,
+  .chord-editor-panel {
+    padding: 12px;
+  }
+
+  .panel-inner {
+    padding: 14px;
+  }
+
+  .chart-sequence {
+    grid-template-columns: 1fr;
   }
 }
