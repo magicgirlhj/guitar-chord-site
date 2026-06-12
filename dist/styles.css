@@ -1530,26 +1530,6 @@ h2 {
   white-space: nowrap;
 }
 
-.card-position-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 100%;
-  min-height: 19px;
-  padding: 1px 7px;
-  border: 1px solid rgba(23, 21, 18, 0.24);
-  border-radius: 999px;
-  background: #171512;
-  color: #fffdf8;
-  font-size: 0.68rem;
-  font-weight: 900;
-  line-height: 1.15;
-  overflow: hidden;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .chart-card .diagram-line {
   stroke: #5d5348;
   stroke-width: 1.45;
@@ -1576,7 +1556,12 @@ h2 {
 }
 
 .chart-card .diagram-fret-label {
-  font-size: 15px;
+  fill: #171512;
+  stroke: #fffdf8;
+  stroke-width: 3.2px;
+  paint-order: stroke fill;
+  font-size: 18px;
+  font-weight: 900;
 }
 
 .card-shape-code {

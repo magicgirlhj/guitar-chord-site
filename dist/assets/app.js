@@ -2800,8 +2800,6 @@ function ChartItem({
 }) {
   const cardClass = ["chart-card", selected ? "selected-chart-card" : "", isPasteTargetAfter ? "paste-target-after" : "", isDragging ? "dragging-card" : "", isDropTarget ? "drop-before" : ""].filter(Boolean).join(" ");
   const itemName = displayChartItemName(item);
-  const positionLabel = item.position || shapePositionName(item.frets);
-  const shouldShowPositionLabel = positionLabel && positionLabel !== "开放把位";
   const clickTimerRef = useRef(null);
   useEffect(() => {
     return () => {
@@ -2877,9 +2875,7 @@ function ChartItem({
     "aria-label": `${selected ? "取消选择" : "选择"} ${itemName}`
   }), React.createElement("div", {
     className: "chart-card-main"
-  }, React.createElement("h3", null, "[", itemName, "]"), shouldShowPositionLabel ? React.createElement("span", {
-    className: "card-position-badge"
-  }, positionLabel) : null, React.createElement("div", {
+  }, React.createElement("h3", null, "[", itemName, "]"), React.createElement("div", {
     className: "chart-diagram-wrap"
   }, React.createElement(ChordDiagram, {
     shape: item.frets,
