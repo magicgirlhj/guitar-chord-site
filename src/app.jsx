@@ -1095,6 +1095,21 @@ function App() {
   }, [activeTab, chartSections, copiedChordItems, copiedChordText, pasteTarget, selectedItemIds]);
 
   useEffect(() => {
+    if (activeTab !== "songbook" || !chordEditor.open) return undefined;
+
+    function handlePointerDown(event) {
+      if (event.target?.closest?.(".chord-editor-panel")) return;
+      closeChordEditor();
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [activeTab, chordEditor.open, activeSection.id]);
+
+  useEffect(() => {
     if (!hasSupabaseConfig(supabaseConfig)) {
       setSyncClient(null);
       setSyncUser(null);
