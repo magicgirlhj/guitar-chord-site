@@ -932,6 +932,41 @@ h2 {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f5ef;
+}
+
+.mode-option {
+  min-height: 38px;
+  min-width: 96px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 12px;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.active-mode {
+  border-color: var(--line-strong);
+  background: #171512;
+  color: #fffdf8;
+}
+
+.songbook-header-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .chart-panel {
   background: #fffdf8;
 }
@@ -1193,6 +1228,147 @@ h2 {
 
 .chart-message {
   order: 5;
+}
+
+.presentation-panel {
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(23, 21, 18, 0.07);
+}
+
+.presentation-page {
+  padding: 24px;
+}
+
+.presentation-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.presentation-title-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.presentation-title-block h2 {
+  font-size: clamp(1.35rem, 2.4vw, 2.05rem);
+  line-height: 1.12;
+}
+
+.presentation-controls {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.presentation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.presentation-content {
+  display: grid;
+  gap: 28px;
+  background: #ffffff;
+}
+
+.presentation-song-title {
+  color: var(--ink);
+  font-size: clamp(1.9rem, 4vw, 2.85rem);
+  line-height: 1.05;
+}
+
+.presentation-section {
+  display: grid;
+  gap: 12px;
+  break-inside: avoid;
+}
+
+.presentation-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 1.18rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.presentation-section-title::before {
+  content: "";
+  width: 4px;
+  height: 1.1em;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.presentation-chord-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.presentation-chord-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 6px;
+  min-height: 126px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.presentation-chord-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presentation-diagram-wrap {
+  width: min(88px, 100%);
+  justify-self: center;
+}
+
+.presentation-diagram-wrap .chord-diagram {
+  width: 100%;
+}
+
+.presentation-chord-card .diagram-line {
+  stroke: #5f574e;
+}
+
+.presentation-chord-card .diagram-root {
+  fill: var(--accent-dark);
+}
+
+.presentation-chord-card .diagram-label,
+.presentation-chord-card .diagram-fret-label {
+  fill: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.presentation-empty {
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: #fffdf8;
+  font-weight: 700;
 }
 
 .chart-section {
@@ -1649,6 +1825,10 @@ h2 {
   .voicing-grid {
     grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
   }
+
+  .presentation-chord-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -1708,6 +1888,27 @@ h2 {
     padding: 16px;
   }
 
+  .songbook-header-tools,
+  .presentation-toolbar,
+  .presentation-controls {
+    align-items: stretch;
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .songbook-header-tools,
+  .presentation-toolbar {
+    flex-direction: column;
+  }
+
+  .mode-switch {
+    width: 100%;
+  }
+
+  .mode-option {
+    min-height: 44px;
+  }
+
   .chart-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1721,6 +1922,38 @@ h2 {
   .sync-setting-actions .ghost-button,
   .sync-auth-actions .ghost-button {
     width: 100%;
+  }
+
+  .presentation-page {
+    padding: 16px;
+  }
+
+  .presentation-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .presentation-actions .ghost-button {
+    width: 100%;
+  }
+
+  .presentation-content {
+    gap: 24px;
+  }
+
+  .presentation-chord-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .presentation-chord-card {
+    min-height: 114px;
+    padding: 7px;
+  }
+
+  .presentation-diagram-wrap {
+    width: min(76px, 100%);
   }
 
   .identifier-grid {
@@ -1941,6 +2174,20 @@ h2 {
   }
 }
 
+@media (max-width: 480px) {
+  .presentation-chord-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .presentation-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .presentation-chord-name {
+    font-size: 0.84rem;
+  }
+}
+
 @media (max-width: 380px) {
   .voicing-grid {
     grid-template-columns: 1fr;
@@ -1958,5 +2205,89 @@ h2 {
 
   .chart-sequence {
     grid-template-columns: repeat(auto-fill, minmax(min(126px, 100%), 1fr));
+  }
+
+  .presentation-chord-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  body {
+    min-width: 0;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .app-shell {
+    width: 100%;
+    padding: 0;
+  }
+
+  .topbar,
+  .app-tabs,
+  .presentation-toolbar,
+  .footer-note,
+  .chart-message,
+  .hidden-tab-panel {
+    display: none !important;
+  }
+
+  .panel,
+  .presentation-panel {
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .presentation-page {
+    padding: 0;
+  }
+
+  .presentation-content {
+    gap: 22px;
+  }
+
+  .presentation-song-title {
+    color: #000000;
+    font-size: 30px;
+  }
+
+  .presentation-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .presentation-section-title {
+    color: #000000;
+    font-size: 18px;
+  }
+
+  .presentation-chord-grid {
+    grid-template-columns: repeat(8, 1fr);
+    gap: 7px;
+  }
+
+  .presentation-chord-card {
+    min-height: 104px;
+    padding: 6px;
+    border-color: #bfb8ad;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .presentation-chord-name {
+    color: #000000;
+    font-size: 12px;
+  }
+
+  .presentation-diagram-wrap {
+    width: 66px;
   }
 }

@@ -1031,8 +1031,120 @@ function sectionClipboardText(items = []) {
 function isEditableTarget(target) {
   return Boolean(target?.closest?.("input, textarea, select, [contenteditable='true']"));
 }
+function safeFileName(value, fallback = "guitar-songbook") {
+  return (value || fallback).replace(/[^\w\u4e00-\u9fa5-]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
+}
+function escapeXml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function truncateSvgText(value, limit = 16) {
+  const text = String(value || UNKNOWN_CHORD_NAME);
+  return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+}
+function svgChordDiagram(shape, root, x, y, width, height) {
+  const played = shape.filter(fret => fret !== null);
+  const positive = played.filter(fret => fret > 0);
+  const minPositive = positive.length ? Math.min(...positive) : 1;
+  const maxFret = played.length ? Math.max(...played) : 4;
+  let firstFret = minPositive;
+  if (played.some(fret => fret === 0) || minPositive <= 1) firstFret = 1;
+  const fretCount = Math.max(4, Math.min(6, maxFret - firstFret + 1));
+  const left = x + width * 0.14;
+  const right = x + width * 0.92;
+  const top = y + height * 0.2;
+  const bottom = y + height * 0.86;
+  const stringGap = (right - left) / 5;
+  const fretGap = (bottom - top) / fretCount;
+  const lines = [];
+  shape.forEach((fret, index) => {
+    const label = fret === null ? "x" : fret === 0 ? "o" : "";
+    if (!label) return;
+    lines.push(`<text x="${left + stringGap * index}" y="${y + 10}" class="diagram-label">${label}</text>`);
+  });
+  for (let index = 0; index < 6; index += 1) {
+    const stringX = left + stringGap * index;
+    lines.push(`<line x1="${stringX}" x2="${stringX}" y1="${top}" y2="${bottom}" class="diagram-line" />`);
+  }
+  for (let index = 0; index <= fretCount; index += 1) {
+    const fretY = top + fretGap * index;
+    lines.push(`<line x1="${left}" x2="${right}" y1="${fretY}" y2="${fretY}" class="${index === 0 && firstFret === 1 ? "diagram-nut" : "diagram-line"}" />`);
+  }
+  if (firstFret > 1) {
+    lines.push(`<text x="${x + 4}" y="${top + fretGap * 0.64}" class="fret-label">${firstFret}fr</text>`);
+  }
+  shape.forEach((fret, index) => {
+    if (fret === null || fret === 0) return;
+    const dotX = left + stringGap * index;
+    const dotY = top + (fret - firstFret + 0.5) * fretGap;
+    const pc = mod(TUNING[index].pc + fret);
+    const isRoot = pc === root;
+    lines.push(`<circle cx="${dotX}" cy="${dotY}" r="5.2" class="${isRoot ? "root-dot" : "dot"}" />`);
+  });
+  TUNING.forEach((string, index) => {
+    lines.push(`<text x="${left + stringGap * index}" y="${y + height - 2}" class="string-label">${escapeXml(string.note)}</text>`);
+  });
+  return lines.join("");
+}
+function buildPresentationSvg(chart) {
+  const pageWidth = 1200;
+  const margin = 56;
+  const columns = 8;
+  const gap = 12;
+  const cardWidth = (pageWidth - margin * 2 - gap * (columns - 1)) / columns;
+  const cardHeight = 150;
+  const sectionGap = 34;
+  let y = 64;
+  const body = [];
+  const sections = Array.isArray(chart.sections) ? chart.sections : [];
+  body.push(`<text x="${margin}" y="${y}" class="title">${escapeXml(chart.title || "未命名曲谱")}</text>`);
+  y += 56;
+  sections.forEach(section => {
+    const items = Array.isArray(section.items) ? section.items : [];
+    body.push(`<line x1="${margin}" x2="${margin + 4}" y1="${y - 18}" y2="${y + 8}" class="accent" />`);
+    body.push(`<text x="${margin + 18}" y="${y}" class="section-title">${escapeXml(section.title || DEFAULT_SECTION_TITLE)}</text>`);
+    y += 24;
+    if (!items.length) {
+      body.push(`<text x="${margin + 18}" y="${y + 22}" class="empty">暂无和弦</text>`);
+      y += 64;
+      return;
+    }
+    items.forEach((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const cardX = margin + column * (cardWidth + gap);
+      const cardY = y + row * (cardHeight + gap);
+      const name = truncateSvgText(displayChartItemName(item), 15);
+      body.push(`<rect x="${cardX}" y="${cardY}" width="${cardWidth}" height="${cardHeight}" rx="7" class="card" />`);
+      body.push(`<text x="${cardX + cardWidth / 2}" y="${cardY + 24}" class="chord-name">${escapeXml(name)}</text>`);
+      body.push(svgChordDiagram(item.frets, item.root, cardX + 12, cardY + 34, cardWidth - 24, cardHeight - 46));
+    });
+    y += Math.ceil(items.length / columns) * (cardHeight + gap) + sectionGap;
+  });
+  const pageHeight = Math.max(520, y + 40);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}">
+  <style>
+    .page { fill: #ffffff; }
+    .title { fill: #171512; font: 800 38px Inter, Arial, sans-serif; }
+    .section-title { fill: #171512; font: 800 23px Inter, Arial, sans-serif; }
+    .accent { stroke: #f26a21; stroke-width: 4; stroke-linecap: round; }
+    .card { fill: #ffffff; stroke: #d8d2c8; stroke-width: 1.2; }
+    .chord-name { fill: #171512; font: 800 18px Inter, Arial, sans-serif; text-anchor: middle; }
+    .diagram-line { stroke: #7d7469; stroke-width: 1.2; }
+    .diagram-nut { stroke: #171512; stroke-width: 3.4; stroke-linecap: round; }
+    .dot { fill: #171512; }
+    .root-dot { fill: #b2662b; }
+    .diagram-label, .string-label { fill: #6b655e; font: 800 10px Inter, Arial, sans-serif; text-anchor: middle; }
+    .fret-label { fill: #171512; font: 800 10px Inter, Arial, sans-serif; }
+    .empty { fill: #6b655e; font: 600 16px Inter, Arial, sans-serif; }
+  </style>
+  <rect class="page" width="100%" height="100%" />
+  ${body.join("\n  ")}
+</svg>`;
+}
 function App() {
   const [activeTab, setActiveTab] = useState("songbook");
+  const [songbookMode, setSongbookMode] = useState("edit");
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
   const [editorBaseFret, setEditorBaseFret] = useState(1);
@@ -1844,6 +1956,41 @@ function App() {
     URL.revokeObjectURL(url);
     setChartMessage("已导出 JSON 备份。长期保存请保留这个文件。");
   }
+  function changeSongbookMode(mode) {
+    setSongbookMode(mode);
+    if (mode === "presentation") {
+      closeChordEditor();
+      setOpenBatchSectionId("");
+      setSelectedItemIds([]);
+      setPasteTarget(null);
+      setDraggedChord(null);
+      setDragTarget(null);
+    }
+  }
+  function printPresentation() {
+    if (!chartItems.length) {
+      setChartMessage("曲谱还是空的，先加入几个和弦再打印。");
+      return;
+    }
+    window.print();
+  }
+  function exportPresentationImage() {
+    if (!chartItems.length) {
+      setChartMessage("曲谱还是空的，先加入几个和弦再导出图片。");
+      return;
+    }
+    const svg = buildPresentationSvg(activeChart);
+    const blob = new Blob([svg], {
+      type: "image/svg+xml;charset=utf-8"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeFileName(chartTitle)}-presentation.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setChartMessage("已导出展示模式 SVG 图片。");
+  }
   async function importChart(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -2217,8 +2364,15 @@ function App() {
       width: `${result.confidence}%`
     }
   })))))))))), React.createElement("section", {
-    className: activeTab === "songbook" ? "panel chart-panel" : "panel chart-panel hidden-tab-panel"
-  }, React.createElement("div", {
+    className: activeTab === "songbook" ? songbookMode === "presentation" ? "panel presentation-panel" : "panel chart-panel" : "panel chart-panel hidden-tab-panel"
+  }, songbookMode === "presentation" ? React.createElement(PresentationView, {
+    title: chartTitle,
+    sections: chartSections,
+    mode: songbookMode,
+    onModeChange: changeSongbookMode,
+    onPrint: printPresentation,
+    onExportImage: exportPresentationImage
+  }) : React.createElement("div", {
     className: "panel-inner"
   }, React.createElement("div", {
     className: "panel-header compact-header"
@@ -2227,6 +2381,11 @@ function App() {
   }, React.createElement("span", {
     className: "eyebrow"
   }, "Songbook"), React.createElement("h2", null, "\u66F2\u8C31\u8BB0\u5F55")), React.createElement("div", {
+    className: "songbook-header-tools"
+  }, React.createElement(ModeSwitch, {
+    mode: songbookMode,
+    onModeChange: changeSongbookMode
+  }), React.createElement("div", {
     className: "chart-actions"
   }, React.createElement("button", {
     className: "ghost-button add-button",
@@ -2252,7 +2411,7 @@ function App() {
   }, "\u5220\u9664\u5F53\u524D"), React.createElement("button", {
     className: "ghost-button danger-button",
     onClick: () => setChartItems([])
-  }, "\u6E05\u7A7A\u6BB5\u843D"))))), React.createElement("input", {
+  }, "\u6E05\u7A7A\u6BB5\u843D")))))), React.createElement("input", {
     ref: importInputRef,
     className: "hidden-file-input",
     type: "file",
@@ -2497,6 +2656,98 @@ function App() {
   }, chartMessage) : null)), React.createElement("p", {
     className: "footer-note"
   }, "MVP \u91C7\u7528\u6807\u51C6\u8C03\u5F26\u548C\u5341\u4E8C\u5E73\u5747\u5F8B\u505A\u8BC6\u522B\u3002\u5B9E\u9645\u97F3\u4E50\u8BED\u5883\u4F1A\u5F71\u54CD\u547D\u540D\uFF0C\u4F8B\u5982\u540C\u4E00\u7EC4\u97F3\u53EF\u80FD\u540C\u65F6\u5BF9\u5E94 Am7 \u4E0E C6\u3002")));
+}
+function ModeSwitch({
+  mode,
+  onModeChange
+}) {
+  return React.createElement("div", {
+    className: "mode-switch",
+    "aria-label": "\u66F2\u8C31\u6A21\u5F0F"
+  }, React.createElement("button", {
+    className: mode === "edit" ? "mode-option active-mode" : "mode-option",
+    onClick: () => onModeChange("edit"),
+    "aria-pressed": mode === "edit"
+  }, "\u7F16\u8F91\u6A21\u5F0F"), React.createElement("button", {
+    className: mode === "presentation" ? "mode-option active-mode" : "mode-option",
+    onClick: () => onModeChange("presentation"),
+    "aria-pressed": mode === "presentation"
+  }, "\u5C55\u793A\u6A21\u5F0F"));
+}
+function PresentationView({
+  title,
+  sections,
+  mode,
+  onModeChange,
+  onPrint,
+  onExportImage
+}) {
+  const safeTitle = title || "未命名曲谱";
+  return React.createElement("div", {
+    className: "presentation-page"
+  }, React.createElement("header", {
+    className: "presentation-toolbar"
+  }, React.createElement("div", {
+    className: "presentation-title-block"
+  }, React.createElement("span", {
+    className: "eyebrow"
+  }, "Presentation"), React.createElement("h2", null, safeTitle)), React.createElement("div", {
+    className: "presentation-controls"
+  }, React.createElement(ModeSwitch, {
+    mode: mode,
+    onModeChange: onModeChange
+  }), React.createElement("div", {
+    className: "presentation-actions"
+  }, React.createElement("button", {
+    className: "ghost-button",
+    onClick: onPrint
+  }, "\u6253\u5370 / \u4FDD\u5B58 PDF"), React.createElement("button", {
+    className: "ghost-button add-button",
+    onClick: onExportImage
+  }, "\u5BFC\u51FA\u56FE\u7247")))), React.createElement("main", {
+    className: "presentation-content",
+    "aria-label": `${safeTitle} 展示曲谱`
+  }, React.createElement("h1", {
+    className: "presentation-song-title"
+  }, safeTitle), sections.map(section => React.createElement(PresentationSection, {
+    section: section,
+    key: section.id
+  }))));
+}
+function PresentationSection({
+  section
+}) {
+  const items = Array.isArray(section.items) ? section.items : [];
+  return React.createElement("section", {
+    className: "presentation-section"
+  }, React.createElement("h2", {
+    className: "presentation-section-title"
+  }, section.title || DEFAULT_SECTION_TITLE), items.length ? React.createElement("div", {
+    className: "presentation-chord-grid"
+  }, items.map(item => React.createElement(PresentationChordCard, {
+    item: item,
+    key: item.id
+  }))) : React.createElement("div", {
+    className: "presentation-empty"
+  }, "\u6682\u65E0\u548C\u5F26"));
+}
+function PresentationChordCard({
+  item
+}) {
+  const itemName = displayChartItemName(item) || UNKNOWN_CHORD_NAME;
+  return React.createElement("article", {
+    className: "presentation-chord-card",
+    "aria-label": `${itemName} 和弦`
+  }, React.createElement("h3", {
+    className: "presentation-chord-name"
+  }, itemName), React.createElement("div", {
+    className: "presentation-diagram-wrap"
+  }, React.createElement(ChordDiagram, {
+    shape: item.frets,
+    root: item.root,
+    startAtLowestFret: true,
+    showFretNumbers: false
+  })));
 }
 function ChordEditorPanel({
   compact = false,

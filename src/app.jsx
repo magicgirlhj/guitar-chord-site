@@ -986,8 +986,150 @@ function isEditableTarget(target) {
   return Boolean(target?.closest?.("input, textarea, select, [contenteditable='true']"));
 }
 
+function safeFileName(value, fallback = "guitar-songbook") {
+  return (value || fallback).replace(/[^\w\u4e00-\u9fa5-]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function truncateSvgText(value, limit = 16) {
+  const text = String(value || UNKNOWN_CHORD_NAME);
+  return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
+}
+
+function svgChordDiagram(shape, root, x, y, width, height) {
+  const played = shape.filter((fret) => fret !== null);
+  const positive = played.filter((fret) => fret > 0);
+  const minPositive = positive.length ? Math.min(...positive) : 1;
+  const maxFret = played.length ? Math.max(...played) : 4;
+  let firstFret = minPositive;
+
+  if (played.some((fret) => fret === 0) || minPositive <= 1) firstFret = 1;
+
+  const fretCount = Math.max(4, Math.min(6, maxFret - firstFret + 1));
+  const left = x + width * 0.14;
+  const right = x + width * 0.92;
+  const top = y + height * 0.2;
+  const bottom = y + height * 0.86;
+  const stringGap = (right - left) / 5;
+  const fretGap = (bottom - top) / fretCount;
+  const lines = [];
+
+  shape.forEach((fret, index) => {
+    const label = fret === null ? "x" : fret === 0 ? "o" : "";
+    if (!label) return;
+    lines.push(`<text x="${left + stringGap * index}" y="${y + 10}" class="diagram-label">${label}</text>`);
+  });
+
+  for (let index = 0; index < 6; index += 1) {
+    const stringX = left + stringGap * index;
+    lines.push(`<line x1="${stringX}" x2="${stringX}" y1="${top}" y2="${bottom}" class="diagram-line" />`);
+  }
+
+  for (let index = 0; index <= fretCount; index += 1) {
+    const fretY = top + fretGap * index;
+    lines.push(
+      `<line x1="${left}" x2="${right}" y1="${fretY}" y2="${fretY}" class="${index === 0 && firstFret === 1 ? "diagram-nut" : "diagram-line"}" />`
+    );
+  }
+
+  if (firstFret > 1) {
+    lines.push(`<text x="${x + 4}" y="${top + fretGap * 0.64}" class="fret-label">${firstFret}fr</text>`);
+  }
+
+  shape.forEach((fret, index) => {
+    if (fret === null || fret === 0) return;
+
+    const dotX = left + stringGap * index;
+    const dotY = top + (fret - firstFret + 0.5) * fretGap;
+    const pc = mod(TUNING[index].pc + fret);
+    const isRoot = pc === root;
+
+    lines.push(`<circle cx="${dotX}" cy="${dotY}" r="5.2" class="${isRoot ? "root-dot" : "dot"}" />`);
+  });
+
+  TUNING.forEach((string, index) => {
+    lines.push(`<text x="${left + stringGap * index}" y="${y + height - 2}" class="string-label">${escapeXml(string.note)}</text>`);
+  });
+
+  return lines.join("");
+}
+
+function buildPresentationSvg(chart) {
+  const pageWidth = 1200;
+  const margin = 56;
+  const columns = 8;
+  const gap = 12;
+  const cardWidth = (pageWidth - margin * 2 - gap * (columns - 1)) / columns;
+  const cardHeight = 150;
+  const sectionGap = 34;
+  let y = 64;
+  const body = [];
+  const sections = Array.isArray(chart.sections) ? chart.sections : [];
+
+  body.push(`<text x="${margin}" y="${y}" class="title">${escapeXml(chart.title || "未命名曲谱")}</text>`);
+  y += 56;
+
+  sections.forEach((section) => {
+    const items = Array.isArray(section.items) ? section.items : [];
+    body.push(`<line x1="${margin}" x2="${margin + 4}" y1="${y - 18}" y2="${y + 8}" class="accent" />`);
+    body.push(`<text x="${margin + 18}" y="${y}" class="section-title">${escapeXml(section.title || DEFAULT_SECTION_TITLE)}</text>`);
+    y += 24;
+
+    if (!items.length) {
+      body.push(`<text x="${margin + 18}" y="${y + 22}" class="empty">暂无和弦</text>`);
+      y += 64;
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const cardX = margin + column * (cardWidth + gap);
+      const cardY = y + row * (cardHeight + gap);
+      const name = truncateSvgText(displayChartItemName(item), 15);
+
+      body.push(`<rect x="${cardX}" y="${cardY}" width="${cardWidth}" height="${cardHeight}" rx="7" class="card" />`);
+      body.push(`<text x="${cardX + cardWidth / 2}" y="${cardY + 24}" class="chord-name">${escapeXml(name)}</text>`);
+      body.push(svgChordDiagram(item.frets, item.root, cardX + 12, cardY + 34, cardWidth - 24, cardHeight - 46));
+    });
+
+    y += Math.ceil(items.length / columns) * (cardHeight + gap) + sectionGap;
+  });
+
+  const pageHeight = Math.max(520, y + 40);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${pageWidth}" height="${pageHeight}" viewBox="0 0 ${pageWidth} ${pageHeight}">
+  <style>
+    .page { fill: #ffffff; }
+    .title { fill: #171512; font: 800 38px Inter, Arial, sans-serif; }
+    .section-title { fill: #171512; font: 800 23px Inter, Arial, sans-serif; }
+    .accent { stroke: #f26a21; stroke-width: 4; stroke-linecap: round; }
+    .card { fill: #ffffff; stroke: #d8d2c8; stroke-width: 1.2; }
+    .chord-name { fill: #171512; font: 800 18px Inter, Arial, sans-serif; text-anchor: middle; }
+    .diagram-line { stroke: #7d7469; stroke-width: 1.2; }
+    .diagram-nut { stroke: #171512; stroke-width: 3.4; stroke-linecap: round; }
+    .dot { fill: #171512; }
+    .root-dot { fill: #b2662b; }
+    .diagram-label, .string-label { fill: #6b655e; font: 800 10px Inter, Arial, sans-serif; text-anchor: middle; }
+    .fret-label { fill: #171512; font: 800 10px Inter, Arial, sans-serif; }
+    .empty { fill: #6b655e; font: 600 16px Inter, Arial, sans-serif; }
+  </style>
+  <rect class="page" width="100%" height="100%" />
+  ${body.join("\n  ")}
+</svg>`;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState("songbook");
+  const [songbookMode, setSongbookMode] = useState("edit");
   const [chordQuery, setChordQuery] = useState("C");
   const [fretValues, setFretValues] = useState(["x", "3", "2", "0", "1", "0"]);
   const [editorBaseFret, setEditorBaseFret] = useState(1);
@@ -1867,6 +2009,46 @@ function App() {
     setChartMessage("已导出 JSON 备份。长期保存请保留这个文件。");
   }
 
+  function changeSongbookMode(mode) {
+    setSongbookMode(mode);
+
+    if (mode === "presentation") {
+      closeChordEditor();
+      setOpenBatchSectionId("");
+      setSelectedItemIds([]);
+      setPasteTarget(null);
+      setDraggedChord(null);
+      setDragTarget(null);
+    }
+  }
+
+  function printPresentation() {
+    if (!chartItems.length) {
+      setChartMessage("曲谱还是空的，先加入几个和弦再打印。");
+      return;
+    }
+
+    window.print();
+  }
+
+  function exportPresentationImage() {
+    if (!chartItems.length) {
+      setChartMessage("曲谱还是空的，先加入几个和弦再导出图片。");
+      return;
+    }
+
+    const svg = buildPresentationSvg(activeChart);
+    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${safeFileName(chartTitle)}-presentation.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setChartMessage("已导出展示模式 SVG 图片。");
+  }
+
   async function importChart(event) {
     const file = event.target.files?.[0];
 
@@ -2241,37 +2423,58 @@ function App() {
           </div>
         </section>
 
-        <section className={activeTab === "songbook" ? "panel chart-panel" : "panel chart-panel hidden-tab-panel"}>
+        <section
+          className={
+            activeTab === "songbook"
+              ? songbookMode === "presentation"
+                ? "panel presentation-panel"
+                : "panel chart-panel"
+              : "panel chart-panel hidden-tab-panel"
+          }
+        >
+          {songbookMode === "presentation" ? (
+            <PresentationView
+              title={chartTitle}
+              sections={chartSections}
+              mode={songbookMode}
+              onModeChange={changeSongbookMode}
+              onPrint={printPresentation}
+              onExportImage={exportPresentationImage}
+            />
+          ) : (
           <div className="panel-inner">
             <div className="panel-header compact-header">
               <div className="panel-title">
                 <span className="eyebrow">Songbook</span>
                 <h2>曲谱记录</h2>
               </div>
-              <div className="chart-actions">
-                <button className="ghost-button add-button" onClick={createChart}>
-                  新建曲谱
-                </button>
-                <button className="ghost-button add-button" onClick={createSection}>
-                  添加段落
-                </button>
-                <details className="more-actions-menu">
-                  <summary className="ghost-button more-actions-trigger">更多</summary>
-                  <div className="more-actions-list">
-                    <button className="ghost-button" onClick={exportChart}>
-                      导出
-                    </button>
-                    <button className="ghost-button" onClick={() => importInputRef.current?.click()}>
-                      导入
-                    </button>
-                    <button className="ghost-button danger-button" onClick={deleteActiveChart}>
-                      删除当前
-                    </button>
-                    <button className="ghost-button danger-button" onClick={() => setChartItems([])}>
-                      清空段落
-                    </button>
-                  </div>
-                </details>
+              <div className="songbook-header-tools">
+                <ModeSwitch mode={songbookMode} onModeChange={changeSongbookMode} />
+                <div className="chart-actions">
+                  <button className="ghost-button add-button" onClick={createChart}>
+                    新建曲谱
+                  </button>
+                  <button className="ghost-button add-button" onClick={createSection}>
+                    添加段落
+                  </button>
+                  <details className="more-actions-menu">
+                    <summary className="ghost-button more-actions-trigger">更多</summary>
+                    <div className="more-actions-list">
+                      <button className="ghost-button" onClick={exportChart}>
+                        导出
+                      </button>
+                      <button className="ghost-button" onClick={() => importInputRef.current?.click()}>
+                        导入
+                      </button>
+                      <button className="ghost-button danger-button" onClick={deleteActiveChart}>
+                        删除当前
+                      </button>
+                      <button className="ghost-button danger-button" onClick={() => setChartItems([])}>
+                        清空段落
+                      </button>
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
 
@@ -2567,6 +2770,7 @@ function App() {
 
             {chartMessage ? <p className="chart-message">{chartMessage}</p> : null}
           </div>
+          )}
         </section>
 
         <p className="footer-note">
@@ -2574,6 +2778,92 @@ function App() {
         </p>
       </main>
     </div>
+  );
+}
+
+function ModeSwitch({ mode, onModeChange }) {
+  return (
+    <div className="mode-switch" aria-label="曲谱模式">
+      <button
+        className={mode === "edit" ? "mode-option active-mode" : "mode-option"}
+        onClick={() => onModeChange("edit")}
+        aria-pressed={mode === "edit"}
+      >
+        编辑模式
+      </button>
+      <button
+        className={mode === "presentation" ? "mode-option active-mode" : "mode-option"}
+        onClick={() => onModeChange("presentation")}
+        aria-pressed={mode === "presentation"}
+      >
+        展示模式
+      </button>
+    </div>
+  );
+}
+
+function PresentationView({ title, sections, mode, onModeChange, onPrint, onExportImage }) {
+  const safeTitle = title || "未命名曲谱";
+
+  return (
+    <div className="presentation-page">
+      <header className="presentation-toolbar">
+        <div className="presentation-title-block">
+          <span className="eyebrow">Presentation</span>
+          <h2>{safeTitle}</h2>
+        </div>
+        <div className="presentation-controls">
+          <ModeSwitch mode={mode} onModeChange={onModeChange} />
+          <div className="presentation-actions">
+            <button className="ghost-button" onClick={onPrint}>
+              打印 / 保存 PDF
+            </button>
+            <button className="ghost-button add-button" onClick={onExportImage}>
+              导出图片
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="presentation-content" aria-label={`${safeTitle} 展示曲谱`}>
+        <h1 className="presentation-song-title">{safeTitle}</h1>
+        {sections.map((section) => (
+          <PresentationSection section={section} key={section.id} />
+        ))}
+      </main>
+    </div>
+  );
+}
+
+function PresentationSection({ section }) {
+  const items = Array.isArray(section.items) ? section.items : [];
+
+  return (
+    <section className="presentation-section">
+      <h2 className="presentation-section-title">{section.title || DEFAULT_SECTION_TITLE}</h2>
+      {items.length ? (
+        <div className="presentation-chord-grid">
+          {items.map((item) => (
+            <PresentationChordCard item={item} key={item.id} />
+          ))}
+        </div>
+      ) : (
+        <div className="presentation-empty">暂无和弦</div>
+      )}
+    </section>
+  );
+}
+
+function PresentationChordCard({ item }) {
+  const itemName = displayChartItemName(item) || UNKNOWN_CHORD_NAME;
+
+  return (
+    <article className="presentation-chord-card" aria-label={`${itemName} 和弦`}>
+      <h3 className="presentation-chord-name">{itemName}</h3>
+      <div className="presentation-diagram-wrap">
+        <ChordDiagram shape={item.frets} root={item.root} startAtLowestFret showFretNumbers={false} />
+      </div>
+    </article>
   );
 }
 
