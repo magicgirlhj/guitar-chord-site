@@ -1013,13 +1013,28 @@ function svgChordDiagram(shape, root, x, y, width, height) {
   if (played.some((fret) => fret === 0) || minPositive <= 1) firstFret = 1;
 
   const fretCount = Math.max(4, Math.min(6, maxFret - firstFret + 1));
-  const left = x + width * 0.14;
+  const hasPositionMarker = firstFret > 1;
+  const left = x + width * (hasPositionMarker ? 0.24 : 0.14);
   const right = x + width * 0.92;
   const top = y + height * 0.2;
   const bottom = y + height * 0.86;
   const stringGap = (right - left) / 5;
   const fretGap = (bottom - top) / fretCount;
   const lines = [];
+
+  if (hasPositionMarker) {
+    const markerX = x + 2;
+    const markerY = top - 3;
+    const markerWidth = Math.max(24, width * 0.15);
+    const markerHeight = Math.min(54, Math.max(34, fretGap * 1.45));
+
+    lines.push(
+      `<rect x="${markerX}" y="${markerY}" width="${markerWidth}" height="${markerHeight}" rx="6" class="position-marker" />`
+    );
+    lines.push(
+      `<text x="${markerX + markerWidth / 2}" y="${markerY + markerHeight / 2 + 1}" class="${firstFret >= 10 ? "position-number compact" : "position-number"}">${firstFret}</text>`
+    );
+  }
 
   shape.forEach((fret, index) => {
     const label = fret === null ? "x" : fret === 0 ? "o" : "";
@@ -1119,7 +1134,9 @@ function buildPresentationSvg(chart) {
     .dot { fill: #171512; }
     .root-dot { fill: #b2662b; }
     .diagram-label, .string-label { fill: #6b655e; font: 800 10px Inter, Arial, sans-serif; text-anchor: middle; }
-    .fret-label { fill: #171512; font: 800 10px Inter, Arial, sans-serif; }
+    .position-marker { fill: #fffdf8; stroke: #d8d2c8; stroke-width: 1.2; }
+    .position-number { fill: #171512; font: 900 24px Inter, Arial, sans-serif; text-anchor: middle; dominant-baseline: central; }
+    .position-number.compact { font-size: 18px; }
     .empty { fill: #6b655e; font: 600 16px Inter, Arial, sans-serif; }
   </style>
   <rect class="page" width="100%" height="100%" />
@@ -3424,9 +3441,10 @@ function ChordDiagram({ shape, root, startAtLowestFret = false, showFretNumbers 
     firstFret = 1;
   }
   const fretCount = Math.max(4, Math.min(6, maxFret - firstFret + 1));
+  const hasPositionMarker = firstFret > 1;
   const width = 260;
   const height = 238;
-  const left = 28;
+  const left = hasPositionMarker ? 48 : 28;
   const right = 18;
   const top = 36;
   const bottom = 32;
@@ -3434,9 +3452,33 @@ function ChordDiagram({ shape, root, startAtLowestFret = false, showFretNumbers 
   const boardHeight = height - top - bottom;
   const stringGap = boardWidth / 5;
   const fretGap = boardHeight / fretCount;
+  const markerX = 3;
+  const markerY = top - 5;
+  const markerWidth = 36;
+  const markerHeight = Math.min(64, Math.max(48, fretGap * 1.45));
 
   return (
     <svg className="chord-diagram" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={compactShape(shape)}>
+      {hasPositionMarker ? (
+        <g className="diagram-position-marker" aria-label={`第 ${firstFret} 把位`}>
+          <rect
+            className="diagram-position-rail"
+            x={markerX}
+            y={markerY}
+            width={markerWidth}
+            height={markerHeight}
+            rx="7"
+          />
+          <text
+            className={firstFret >= 10 ? "diagram-fret-number compact" : "diagram-fret-number"}
+            x={markerX + markerWidth / 2}
+            y={markerY + markerHeight / 2 + 1}
+          >
+            {firstFret}
+          </text>
+        </g>
+      ) : null}
+
       {shape.map((fret, index) => {
         const x = left + stringGap * index;
         const label = fret === null ? "x" : fret === 0 ? "o" : "";
@@ -3477,12 +3519,6 @@ function ChordDiagram({ shape, root, startAtLowestFret = false, showFretNumbers 
           />
         );
       })}
-
-      {firstFret > 1 ? (
-        <text className="diagram-fret-label" x={4} y={top + fretGap * 0.65}>
-          {firstFret}fr
-        </text>
-      ) : null}
 
       {shape.map((fret, index) => {
         if (fret === null || fret === 0) return null;

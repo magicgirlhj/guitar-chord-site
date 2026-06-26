@@ -494,10 +494,22 @@ h2 {
   text-anchor: middle;
 }
 
-.diagram-fret-label {
-  fill: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+.diagram-position-rail {
+  fill: #fffdf8;
+  stroke: var(--line);
+  stroke-width: 1.4;
+}
+
+.diagram-fret-number {
+  fill: #171512;
+  font-size: 30px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.diagram-fret-number.compact {
+  font-size: 24px;
 }
 
 .identifier-grid {
@@ -1356,10 +1368,24 @@ h2 {
 }
 
 .presentation-chord-card .diagram-label,
-.presentation-chord-card .diagram-fret-label {
+.presentation-chord-card .diagram-fret-number {
   fill: var(--ink);
   font-size: 13px;
   font-weight: 900;
+}
+
+.presentation-chord-card .diagram-position-rail {
+  fill: #fffdf8;
+  stroke: #d8d2c8;
+  stroke-width: 1.6;
+}
+
+.presentation-chord-card .diagram-fret-number {
+  font-size: 36px;
+}
+
+.presentation-chord-card .diagram-fret-number.compact {
+  font-size: 27px;
 }
 
 .presentation-empty {
@@ -1724,20 +1750,24 @@ h2 {
   font-size: 13px;
 }
 
-.chart-card .diagram-label,
-.chart-card .diagram-fret-label {
+.chart-card .diagram-label {
   fill: var(--ink);
   font-size: 13px;
   font-weight: 900;
 }
 
-.chart-card .diagram-fret-label {
-  fill: #171512;
-  stroke: #fffdf8;
-  stroke-width: 3.2px;
-  paint-order: stroke fill;
-  font-size: 18px;
-  font-weight: 900;
+.chart-card .diagram-position-rail {
+  fill: #fffdf8;
+  stroke: #d8d2c8;
+  stroke-width: 1.8;
+}
+
+.chart-card .diagram-fret-number {
+  font-size: 38px;
+}
+
+.chart-card .diagram-fret-number.compact {
+  font-size: 28px;
 }
 
 .card-shape-code {
