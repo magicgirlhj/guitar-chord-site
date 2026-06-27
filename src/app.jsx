@@ -1054,10 +1054,6 @@ function svgChordDiagram(shape, root, x, y, width, height) {
     );
   }
 
-  if (firstFret > 1) {
-    lines.push(`<text x="${x + 4}" y="${top + fretGap * 0.64}" class="fret-label">${firstFret}fr</text>`);
-  }
-
   shape.forEach((fret, index) => {
     if (fret === null || fret === 0) return;
 

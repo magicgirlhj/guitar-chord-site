@@ -1078,9 +1078,6 @@ function svgChordDiagram(shape, root, x, y, width, height) {
     const fretY = top + fretGap * index;
     lines.push(`<line x1="${left}" x2="${right}" y1="${fretY}" y2="${fretY}" class="${index === 0 && firstFret === 1 ? "diagram-nut" : "diagram-line"}" />`);
   }
-  if (firstFret > 1) {
-    lines.push(`<text x="${x + 4}" y="${top + fretGap * 0.64}" class="fret-label">${firstFret}fr</text>`);
-  }
   shape.forEach((fret, index) => {
     if (fret === null || fret === 0) return;
     const dotX = left + stringGap * index;
